@@ -74,7 +74,7 @@ export default function StorageTestPage() {
         throw error
       }
 
-      setFiles(data || [])
+      setFiles((data || []) as any)
       setCurrentBucket(bucket)
 
       // 이미지 파일의 미리보기 URL 생성
