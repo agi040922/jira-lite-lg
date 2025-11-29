@@ -173,10 +173,10 @@ const DashboardWithDB: React.FC<DashboardWithDBProps> = ({
           .select(`
             *,
             assignee:assignee_id(id, email, name, profile_image),
-            owner:owner_id(id, email, name, profile_image),
+            reporter:reporter_id(id, email, name, profile_image),
             status:status_id(id, project_id, name, color, position, is_default)
           `)
-          .or(`assignee_id.eq.${userId},owner_id.eq.${userId}`)
+          .or(`assignee_id.eq.${userId},reporter_id.eq.${userId}`)
           .is('deleted_at', null)
           .order('created_at', { ascending: false });
 

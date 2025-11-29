@@ -48,7 +48,7 @@ interface IssueData {
   due_date: string | null;
   created_at: string;
   assignee: User | null;
-  owner: User | null;
+  reporter: User | null;
   status: ProjectStatus | null;
   labels: Label[];
   subtasks: Subtask[];
@@ -89,7 +89,7 @@ const IssueDetailWithDB: React.FC<IssueDetailWithDBProps> = ({ issueId }) => {
             email,
             profile_image
           ),
-          owner:owner_id (
+          reporter:reporter_id (
             id,
             name,
             email,
@@ -396,7 +396,7 @@ const IssueDetailWithDB: React.FC<IssueDetailWithDBProps> = ({ issueId }) => {
             {/* 댓글 입력창 */}
             <div className="flex gap-4 mb-6">
               <img
-                src={issue.owner?.profile_image || "https://picsum.photos/100/100"}
+                src={issue.reporter?.profile_image || "https://picsum.photos/100/100"}
                 className="w-8 h-8 rounded-full"
                 alt="me"
               />
@@ -542,17 +542,17 @@ const IssueDetailWithDB: React.FC<IssueDetailWithDBProps> = ({ issueId }) => {
               </div>
             </div>
 
-            {/* Reporter (Owner) */}
+            {/* Reporter */}
             <div>
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">생성자</label>
-              {issue.owner ? (
+              {issue.reporter ? (
                 <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-2 shadow-sm">
                   <img
-                    src={issue.owner.profile_image || "https://picsum.photos/100/100"}
+                    src={issue.reporter.profile_image || "https://picsum.photos/100/100"}
                     className="w-6 h-6 rounded-full"
-                    alt="Owner"
+                    alt="Reporter"
                   />
-                  <span className="text-sm text-slate-700">{issue.owner.name}</span>
+                  <span className="text-sm text-slate-700">{issue.reporter.name}</span>
                 </div>
               ) : (
                 <div className="text-sm text-slate-400 italic">정보 없음</div>

@@ -436,17 +436,29 @@ function ResponseView() {
 
     let isJson = false
     let formattedJson = ""
+    let displayContent = response
 
     try {
-        const parsed = JSON.parse(response)
+        // Try to parse the raw response first
+        let jsonString = response
+        
+        // Check for markdown code blocks
+        const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/
+        const match = response.match(codeBlockRegex)
+        if (match) {
+            jsonString = match[1]
+        }
+
+        const parsed = JSON.parse(jsonString)
         formattedJson = JSON.stringify(parsed, null, 2)
         isJson = true
+        displayContent = formattedJson
     } catch (e) {
         // Not JSON
     }
 
     const handleCopy = () => {
-        navigator.clipboard.writeText(isJson ? formattedJson : response)
+        navigator.clipboard.writeText(displayContent)
         setIsCopied(true)
         setTimeout(() => setIsCopied(false), 2000)
     }

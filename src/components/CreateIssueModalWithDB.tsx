@@ -183,17 +183,31 @@ const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSu
                 throw new Error('로그인이 필요합니다.');
             }
 
+            // 프로젝트의 기본 status 조회 (is_default=true 또는 position이 가장 작은 것)
+            const { data: defaultStatus, error: statusError } = await supabase
+                .from('project_statuses')
+                .select('id')
+                .eq('project_id', selectedProjectId)
+                .order('position', { ascending: true })
+                .limit(1)
+                .single();
+
+            if (statusError || !defaultStatus) {
+                throw new Error('프로젝트의 기본 상태를 찾을 수 없습니다.');
+            }
+
             // 이슈 생성
-            // issue_key와 issue_number는 트리거로 자동 생성됨
+            // issue_key는 트리거로 자동 생성됨
             const { data, error } = await supabase
                 .from('issues')
                 .insert({
                     project_id: selectedProjectId,
                     title: title.trim(),
                     description: description.trim() || null,
+                    type: 'TASK', // 기본 타입
                     priority: selectedPriority,
-                    owner_id: user.id,
-                    position: 0, // 기본 위치
+                    reporter_id: user.id,
+                    status_id: defaultStatus.id,
                 })
                 .select('id, issue_key')
                 .single();
