@@ -60,30 +60,27 @@ const Inbox: React.FC<InboxProps> = ({ userId }) => {
       setLoading(true);
       setError(null);
 
-      // notifications 테이블에서 데이터 조회
-      // reference_type이 'issue'인 경우 issues 테이블과 조인
+      console.log("Fetching notifications for userId:", userId);
+
+      // Step 1: 기본 데이터만 먼저 조회 (조인 없이)
       const { data, error: fetchError } = await supabase
         .from("notifications")
-        .select(`
-          *,
-          issue:issues!notifications_reference_id_fkey(
-            issue_key,
-            title,
-            priority
-          ),
-          triggered_by:users!notifications_user_id_fkey(
-            name,
-            profile_image
-          )
-        `)
+        .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(50);
 
       if (fetchError) {
+        console.error("Supabase fetch error:", {
+          message: fetchError.message,
+          details: fetchError.details,
+          hint: fetchError.hint,
+          code: fetchError.code
+        });
         throw fetchError;
       }
 
+      console.log("Fetched notifications:", data);
       setNotifications(data || []);
     } catch (err) {
       console.error("Failed to fetch notifications:", err);

@@ -272,7 +272,7 @@ const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSu
                         <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
                         <input
                             type="text"
-                            className="w-full text-lg font-medium border-b border-slate-200 pb-2 focus:outline-none focus:border-brand-500 placeholder:text-slate-300 transition-colors disabled:opacity-50"
+                            className="w-full text-lg font-medium text-slate-900 border-b border-slate-200 pb-2 focus:outline-none focus:border-brand-500 placeholder:text-slate-300 transition-colors disabled:opacity-50"
                             placeholder="Issue title..."
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
@@ -316,7 +316,7 @@ const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSu
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
                         <textarea
-                            className="w-full border border-slate-200 rounded-lg p-3 h-32 focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none resize-none text-sm leading-relaxed disabled:opacity-50"
+                            className="w-full text-slate-900 border border-slate-200 rounded-lg p-3 h-32 focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none resize-none text-sm leading-relaxed disabled:opacity-50"
                             placeholder="Describe the issue..."
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Mail, Shield, Trash2, MoreVertical, Plus, Loader2, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { useTeam } from '@/components/providers/TeamContext';
 
 // 타입 정의
 interface User {
@@ -31,12 +32,12 @@ interface TeamMember {
 
 const TeamManageWithDB: React.FC = () => {
   const supabase = createClient();
+  const { currentTeam, isLoading: isTeamLoading } = useTeam();
 
   // 상태 관리
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingMembers, setLoadingMembers] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'ADMIN' | 'MEMBER'>('MEMBER');
@@ -44,12 +45,19 @@ const TeamManageWithDB: React.FC = () => {
 
   // 데이터 로드
   useEffect(() => {
-    loadTeamData();
-  }, []);
+    if (currentTeam) {
+      loadTeamMembers();
+    } else {
+      setTeamMembers([]);
+      setCurrentUserRole(null);
+    }
+  }, [currentTeam]);
 
-  const loadTeamData = async () => {
+  const loadTeamMembers = async () => {
+    if (!currentTeam) return;
+    
     try {
-      setLoading(true);
+      setLoadingMembers(true);
 
       // 현재 로그인한 사용자 정보 가져오기
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -59,24 +67,19 @@ const TeamManageWithDB: React.FC = () => {
         return;
       }
 
-      // 사용자가 속한 팀 멤버십 조회 (첫 번째 팀을 사용)
+      // 현재 팀에서의 내 역할 조회
       const { data: myMembership, error: membershipError } = await supabase
         .from('team_members')
-        .select('team_id, role')
+        .select('role')
+        .eq('team_id', currentTeam.id)
         .eq('user_id', user.id)
-        .limit(1)
         .single();
 
-      if (membershipError || !myMembership) {
+      if (membershipError) {
         console.error('팀 멤버십 조회 오류:', membershipError);
-        // 팀이 없으면 빈 상태로 설정 (아래에서 "팀 생성" UI 표시)
-        setTeamMembers([]);
-        setCurrentTeam(null);
-        setLoading(false);
-        return;
+      } else {
+        setCurrentUserRole(myMembership?.role || null);
       }
-
-      setCurrentUserRole(myMembership.role);
 
       // 해당 팀의 모든 멤버 조회 (user와 team 정보 조인)
       const { data: members, error: membersError } = await supabase
@@ -96,11 +99,10 @@ const TeamManageWithDB: React.FC = () => {
           team:teams!team_members_team_id_fkey (
             id,
             name,
-            description,
             owner_id
           )
         `)
-        .eq('team_id', myMembership.team_id)
+        .eq('team_id', currentTeam.id)
         .order('role', { ascending: true }) // OWNER, ADMIN, MEMBER 순으로 정렬
         .order('joined_at', { ascending: true });
 
@@ -109,14 +111,13 @@ const TeamManageWithDB: React.FC = () => {
         return;
       }
 
-      if (members && members.length > 0) {
-        setTeamMembers(members as TeamMember[]);
-        setCurrentTeam((members[0] as TeamMember).team);
+      if (members) {
+        setTeamMembers(members as unknown as TeamMember[]);
       }
     } catch (error) {
       console.error('데이터 로드 중 오류:', error);
     } finally {
-      setLoading(false);
+      setLoadingMembers(false);
     }
   };
 
@@ -226,7 +227,7 @@ const TeamManageWithDB: React.FC = () => {
       setIsInviteModalOpen(false);
       setInviteEmail('');
       setInviteRole('MEMBER');
-      await loadTeamData();
+      await loadTeamMembers();
     } catch (error) {
       console.error('멤버 초대 중 오류:', error);
       alert('멤버 초대 중 오류가 발생했습니다.');
@@ -248,7 +249,7 @@ const TeamManageWithDB: React.FC = () => {
   };
 
   // 로딩 상태
-  if (loading) {
+  if (isTeamLoading || (loadingMembers && teamMembers.length === 0)) {
     return (
       <div className="p-6 md:p-8 max-w-6xl mx-auto h-full flex items-center justify-center">
         <div className="text-center">
@@ -260,7 +261,7 @@ const TeamManageWithDB: React.FC = () => {
   }
 
   // 팀이 없을 때 (신규 사용자)
-  if (!currentTeam && teamMembers.length === 0) {
+  if (!currentTeam) {
     return (
       <div className="p-6 md:p-8 max-w-4xl mx-auto h-full flex items-center justify-center">
         <div className="text-center max-w-md">
@@ -329,19 +330,10 @@ const TeamManageWithDB: React.FC = () => {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-500 bg-slate-50"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                <textarea
-                  value={currentTeam.description || ''}
-                  readOnly
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-500 min-h-[80px] bg-slate-50"
-                />
-              </div>
             </div>
           </div>
         </div>
       )}
-
       {/* Team Members Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-left border-collapse">

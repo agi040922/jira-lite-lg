@@ -48,6 +48,9 @@ export default function AppLayout({ children, currentView, title }: AppLayoutPro
       case 'views':
         router.push('/views');
         break;
+      case 'trash':
+        router.push('/trash');
+        break;
       default:
         break;
     }

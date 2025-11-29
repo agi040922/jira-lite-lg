@@ -32,11 +32,21 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // 보호된 라우트에 대한 검증 (필요시 추가)
-  // 예: /test 경로는 인증 불필요, 다른 경로는 인증 필요
-  // if (!user && request.nextUrl.pathname.startsWith('/protected')) {
-  //   return NextResponse.redirect(new URL('/login', request.url))
-  // }
+  // 보호된 라우트 정의
+  const protectedRoutes = ['/dashboard', '/inbox', '/issues', '/projects', '/reviews', '/settings', '/insights', '/views', '/team']
+  const isProtectedRoute = protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))
+  
+  // 공개 경로 정의 (인증 불필요)
+  const publicRoutes = ['/test', '/auth']
+  const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))
+
+  // 인증이 필요한 경로인데 사용자가 로그인하지 않은 경우
+  if (!user && isProtectedRoute) {
+    // 루트 경로로 리다이렉트 (로그인 페이지가 있다면 '/login'으로 변경)
+    const redirectUrl = new URL('/', request.url)
+    console.log(`Redirecting unauthenticated user from ${request.nextUrl.pathname} to /`)
+    return NextResponse.redirect(redirectUrl)
+  }
 
   return supabaseResponse
 }

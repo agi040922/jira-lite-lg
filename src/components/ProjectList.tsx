@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Health, Priority } from '../types';
-import { Activity, AlertTriangle, CheckCircle, BarChart3, Plus, Filter, SlidersHorizontal, Calendar, LayoutGrid, List } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle, BarChart3, Plus, Filter, SlidersHorizontal, Calendar, LayoutGrid, List, Trash2, X, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 // Supabase에서 가져온 프로젝트 데이터 타입
@@ -90,16 +90,30 @@ const getPriorityIcon = (priority: Priority) => {
     }
 };
 
+import { useTeam } from './providers/TeamContext';
+
+// ... (existing imports)
+
 const ProjectList: React.FC = () => {
+  const { currentTeam } = useTeam();
   const [projects, setProjects] = useState<ProjectWithDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 삭제 관련 상태
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<ProjectWithDB | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    if (currentTeam) {
+      fetchProjects();
+    }
+  }, [currentTeam]);
 
   const fetchProjects = async () => {
+    if (!currentTeam) return;
+
     try {
       setLoading(true);
       setError(null);
@@ -134,6 +148,7 @@ const ProjectList: React.FC = () => {
             profile_image
           )
         `)
+        .eq('team_id', currentTeam.id) // 현재 팀의 프로젝트만 필터링
         .is('deleted_at', null)  // Soft Delete된 프로젝트 제외
         .eq('is_archived', false)  // 아카이브되지 않은 프로젝트만
         .order('updated_at', { ascending: false });
@@ -146,7 +161,7 @@ const ProjectList: React.FC = () => {
 
       // 3. 각 프로젝트별 이슈 개수 조회 (전체 이슈, 완료된 이슈)
       const projectsWithDetails = await Promise.all(
-        (projectsData || []).map(async (project) => {
+        (projectsData || []).map(async (project: any) => {
           // 전체 이슈 개수 조회
           const { count: totalIssueCount } = await supabase
             .from('issues')
@@ -160,8 +175,7 @@ const ProjectList: React.FC = () => {
             .from('project_statuses')
             .select('id')
             .eq('project_id', project.id)
-            .eq('name', 'Done')
-            .is('deleted_at', null);
+            .eq('name', 'Done');
 
           let completedCount = 0;
           if (doneStatuses && doneStatuses.length > 0) {
@@ -176,11 +190,16 @@ const ProjectList: React.FC = () => {
             completedCount = completed || 0;
           }
 
+          const team = Array.isArray(project.team) ? project.team[0] : project.team;
+          const owner = Array.isArray(project.owner) ? project.owner[0] : project.owner;
+
           return {
             ...project,
+            team,
+            owner,
             issue_count: totalIssueCount || 0,
             completed_issue_count: completedCount,
-          };
+          } as ProjectWithDB;
         })
       );
 
@@ -190,6 +209,50 @@ const ProjectList: React.FC = () => {
       setError('프로젝트를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 삭제 모달 열기
+  const openDeleteModal = (project: ProjectWithDB, e: React.MouseEvent) => {
+    e.stopPropagation(); // row 클릭 이벤트 방지
+    setProjectToDelete(project);
+    setDeleteModalOpen(true);
+  };
+
+  // 삭제 모달 닫기
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false);
+    setProjectToDelete(null);
+  };
+
+  // Soft Delete 실행
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+
+    try {
+      setDeleting(true);
+      const supabase = createClient();
+
+      // Soft Delete: deleted_at을 현재 시간으로 설정
+      const { error: deleteError } = await supabase
+        .from('projects')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', projectToDelete.id);
+
+      if (deleteError) {
+        console.error('프로젝트 삭제 오류:', deleteError);
+        alert('프로젝트 삭제에 실패했습니다.');
+        return;
+      }
+
+      // 목록에서 제거 (UI 업데이트)
+      setProjects(prev => prev.filter(p => p.id !== projectToDelete.id));
+      closeDeleteModal();
+    } catch (err) {
+      console.error('프로젝트 삭제 중 오류:', err);
+      alert('프로젝트 삭제 중 오류가 발생했습니다.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -347,9 +410,17 @@ const ProjectList: React.FC = () => {
                       <div className="col-span-2 flex items-center gap-3">
                           <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-brand-500 border-r-brand-500 transform -rotate-45"></div>
                           <span className="text-xs font-medium text-slate-600">{statusPercent}%</span>
-                          <div className="h-0.5 w-12 bg-slate-100 rounded-full overflow-hidden ml-auto hidden md:block">
+                          <div className="h-0.5 w-12 bg-slate-100 rounded-full overflow-hidden hidden md:block">
                               <div className="h-full bg-brand-500" style={{width: `${statusPercent}%`}}></div>
                           </div>
+                          {/* 삭제 버튼 - hover 시 표시 */}
+                          <button
+                            onClick={(e) => openDeleteModal(project, e)}
+                            className="ml-auto opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+                            title="프로젝트 삭제"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                       </div>
                   </div>
                 );
@@ -367,6 +438,80 @@ const ProjectList: React.FC = () => {
                  </div>
              </div>
         </div>
+
+        {/* 삭제 확인 모달 */}
+        {deleteModalOpen && projectToDelete && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden">
+              {/* 모달 헤더 */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <h3 className="text-lg font-semibold text-slate-900">프로젝트 삭제</h3>
+                <button
+                  onClick={closeDeleteModal}
+                  className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* 모달 내용 */}
+              <div className="px-6 py-4">
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="p-2 bg-red-100 rounded-full">
+                    <AlertTriangle size={20} className="text-red-600" />
+                  </div>
+                  <div>
+                    <p className="text-slate-700 font-medium">
+                      "{projectToDelete.name}" 프로젝트를 삭제하시겠습니까?
+                    </p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      이 프로젝트에 포함된 모든 이슈와 데이터가 숨김 처리됩니다.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 프로젝트 정보 표시 */}
+                <div className="bg-slate-50 rounded-lg p-3 text-sm">
+                  <div className="flex justify-between mb-1">
+                    <span className="text-slate-500">이슈 개수</span>
+                    <span className="font-medium text-slate-700">
+                      {projectToDelete.issue_count || 0}개
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">프로젝트 리드</span>
+                    <span className="font-medium text-slate-700">
+                      {projectToDelete.owner?.name || '없음'}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-400 mt-3">
+                  * Soft Delete로 처리되어 나중에 복구할 수 있습니다.
+                </p>
+              </div>
+
+              {/* 모달 푸터 */}
+              <div className="flex justify-end gap-2 px-6 py-4 bg-slate-50 border-t border-slate-100">
+                <button
+                  onClick={closeDeleteModal}
+                  disabled={deleting}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleDeleteProject}
+                  disabled={deleting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {deleting && <Loader2 size={14} className="animate-spin" />}
+                  {deleting ? '삭제 중...' : '삭제'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 };

@@ -150,17 +150,24 @@ interface DashboardWithDBProps {
   onOpenIssue?: (issue: IssueWithRelations) => void;
 }
 
+import { useTeam } from './providers/TeamContext';
+
+// ... (existing imports)
+
 const DashboardWithDB: React.FC<DashboardWithDBProps> = ({
   userId,
   title = "My issues",
   onOpenIssue
 }) => {
+  const { currentTeam } = useTeam();
   const [issues, setIssues] = useState<IssueWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchIssues = async () => {
+      if (!currentTeam) return;
+
       try {
         setLoading(true);
         setError(null);
@@ -168,14 +175,17 @@ const DashboardWithDB: React.FC<DashboardWithDBProps> = ({
         const supabase = createClient();
 
         // issues 테이블에서 조회하면서 필요한 데이터 조인
+        // 프로젝트가 현재 팀에 속해있는지 확인하기 위해 project:projects!inner(team_id) 추가
         const { data, error: fetchError } = await supabase
           .from('issues')
           .select(`
             *,
             assignee:assignee_id(id, email, name, profile_image),
             reporter:reporter_id(id, email, name, profile_image),
-            status:status_id(id, project_id, name, color, position, is_default)
+            status:status_id(id, project_id, name, color, position, is_default),
+            project:projects!inner(team_id)
           `)
+          .eq('project.team_id', currentTeam.id)
           .or(`assignee_id.eq.${userId},reporter_id.eq.${userId}`)
           .is('deleted_at', null)
           .order('created_at', { ascending: false });
@@ -206,8 +216,8 @@ const DashboardWithDB: React.FC<DashboardWithDBProps> = ({
           const issuesWithLabels = data.map(issue => {
             const issueLabels = labelsData
               ?.filter(il => il.issue_id === issue.id)
-              .map(il => il.labels)
-              .filter((label): label is Label => label !== null) || [];
+              .map(il => Array.isArray(il.labels) ? il.labels[0] : il.labels)
+              .filter((label): label is Label => label !== null && label !== undefined) || [];
 
             return {
               ...issue,
@@ -227,10 +237,10 @@ const DashboardWithDB: React.FC<DashboardWithDBProps> = ({
       }
     };
 
-    if (userId) {
+    if (userId && currentTeam) {
       fetchIssues();
     }
-  }, [userId]);
+  }, [userId, currentTeam]);
 
   // 상태별로 이슈 그룹화
   const inReviewIssues = issues.filter(i => i.status?.name === STATUS_MAP.IN_REVIEW);

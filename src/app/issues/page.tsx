@@ -22,32 +22,57 @@ export default function IssuesPage() {
       if (!userId) return;
 
       try {
-        // 사용자가 속한 팀의 첫 번째 프로젝트 조회
+        console.log('🔍 Fetching projects for user:', userId);
+
+        // 사용자가 속한 팀의 첫 번째 프로젝트 조회 (single 제거)
         const { data: memberData, error: memberError } = await supabase
           .from('team_members')
           .select('team_id')
           .eq('user_id', userId)
-          .limit(1)
-          .single();
+          .limit(1);
 
-        if (memberError) throw memberError;
+        if (memberError) {
+          console.error('❌ Error fetching team membership:', memberError);
+          throw memberError;
+        }
 
-        if (memberData) {
+        console.log('📊 Team membership data:', memberData);
+
+        if (memberData && memberData.length > 0) {
+          const teamId = memberData[0].team_id;
+          console.log('🏢 Team ID:', teamId);
+
           const { data: projectData, error: projectError } = await supabase
             .from('projects')
             .select('id')
-            .eq('team_id', memberData.team_id)
-            .limit(1)
-            .single();
+            .eq('team_id', teamId)
+            .is('deleted_at', null)
+            .limit(1);
 
-          if (projectError) throw projectError;
-
-          if (projectData) {
-            setProjectId(projectData.id);
+          if (projectError) {
+            console.error('❌ Error fetching project:', projectError);
+            throw projectError;
           }
+
+          console.log('📁 Project data:', projectData);
+
+          if (projectData && projectData.length > 0) {
+            setProjectId(projectData[0].id);
+            console.log('✅ Project found:', projectData[0].id);
+          } else {
+            console.log('⚠️ No projects found for team:', teamId);
+          }
+        } else {
+          console.log('⚠️ User is not a member of any team');
         }
-      } catch (err) {
-        console.error('Error fetching project:', err);
+      } catch (err: any) {
+        console.error('❌ Error fetching project (detailed):', {
+          message: err?.message,
+          details: err?.details,
+          hint: err?.hint,
+          code: err?.code,
+          fullError: JSON.stringify(err, null, 2)
+        });
       } finally {
         setLoading(false);
       }
@@ -88,7 +113,7 @@ export default function IssuesPage() {
             </p>
             <button
               onClick={() => window.location.href = '/projects/new'}
-              className="inline-flex items-center gap-2 bg-brand-500 text-white px-4 py-2 rounded-lg hover:bg-brand-600 transition-colors shadow-sm font-medium"
+              className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -105,7 +130,7 @@ export default function IssuesPage() {
     <AppLayout currentView="team_issues" title="All Issues">
       <ProjectKanbanWithDB
         projectId={projectId}
-        onOpenIssue={handleOpenIssue}
+        handleOpenIssue={handleOpenIssue}
       />
     </AppLayout>
   );

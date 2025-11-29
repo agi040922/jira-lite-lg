@@ -37,7 +37,7 @@ interface Issue {
   status_id: string;
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   assignee_id?: string;
-  position: number;
+  created_at: string;
   // 조인된 데이터
   assignee?: User;
   labels?: Label[];
@@ -45,7 +45,7 @@ interface Issue {
 
 interface ProjectKanbanWithDBProps {
   projectId: string;
-  onOpenIssue?: (issue: Issue) => void;
+  handleOpenIssue?: (issue: Issue) => void;
 }
 
 // =============================================
@@ -54,7 +54,7 @@ interface ProjectKanbanWithDBProps {
 
 const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
   projectId,
-  onOpenIssue
+  handleOpenIssue
 }) => {
   const supabase = createClient();
 
@@ -89,7 +89,7 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
   // 이슈 조회 (assignee, labels 조인)
   const fetchIssues = async () => {
     try {
-      // 1. 이슈 기본 정보 조회
+      // 1. 이슈 기본 정보 조회 (assignee 조인 제외)
       const { data: issuesData, error: issuesError } = await supabase
         .from('issues')
         .select(`
@@ -100,23 +100,39 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
           status_id,
           priority,
           assignee_id,
-          position,
-          assignee:users!assignee_id (
-            id,
-            name,
-            email,
-            avatar_url
-          )
+          created_at
         `)
         .eq('project_id', projectId)
         .is('deleted_at', null)
-        .order('position', { ascending: true });
+        .order('created_at', { ascending: true });
 
-      if (issuesError) throw issuesError;
+      if (issuesError) {
+        console.error('❌ Issues query error:', {
+          message: issuesError.message,
+          details: issuesError.details,
+          hint: issuesError.hint,
+          code: issuesError.code
+        });
+        throw issuesError;
+      }
 
-      // 2. 각 이슈의 라벨 조회
-      const issuesWithLabels = await Promise.all(
+      console.log('✅ Issues data:', issuesData);
+
+      // 2. 각 이슈의 assignee와 라벨 조회
+      const issuesWithDetails = await Promise.all(
         (issuesData || []).map(async (issue) => {
+          // assignee 정보 조회
+          let assignee: User | undefined;
+          if (issue.assignee_id) {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('id, name, email, avatar_url')
+              .eq('id', issue.assignee_id)
+              .single();
+            assignee = userData || undefined;
+          }
+
+          // 라벨 정보 조회
           const { data: labelData, error: labelError } = await supabase
             .from('issue_labels')
             .select(`
@@ -134,15 +150,21 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
 
           return {
             ...issue,
-            assignee: issue.assignee as User | undefined,
+            assignee,
             labels: labelData?.map((l: any) => l.label).filter(Boolean) || []
           };
         })
       );
 
-      setIssues(issuesWithLabels);
-    } catch (err) {
-      console.error('Error fetching issues:', err);
+      setIssues(issuesWithDetails);
+    } catch (err: any) {
+      console.error('❌ Error fetching issues (detailed):', {
+        message: err?.message,
+        details: err?.details,
+        hint: err?.hint,
+        code: err?.code,
+        fullError: err
+      });
       setError('이슈 목록을 불러오는데 실패했습니다.');
     }
   };
@@ -339,7 +361,7 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
                     key={issue.id}
                     draggable
                     onDragStart={() => handleDragStart(issue)}
-                    onClick={() => onOpenIssue?.(issue)}
+                    onClick={() => handleOpenIssue?.(issue)}
                     className="bg-white p-3 rounded-md border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-move group"
                   >
                     <div className="flex justify-between items-start mb-1.5">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { TeamProvider } from "@/components/providers/TeamContext";
 
 // Google Font 최적화
 const inter = Inter({
@@ -23,7 +24,9 @@ export default function RootLayout({
   return (
     <html lang="ko" className={inter.variable} suppressHydrationWarning>
       <body className="antialiased" suppressHydrationWarning>
-        {children}
+        <TeamProvider>
+          {children}
+        </TeamProvider>
       </body>
     </html>
   );
