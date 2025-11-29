@@ -1,0 +1,62 @@
+// 간단한 버전 - 디버깅용
+import { NextRequest, NextResponse } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
+import { createClient } from '@/lib/supabase/server';
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { email, teamId } = body;
+
+    console.log('=== API 호출 ===');
+    console.log('Email:', email);
+    console.log('Team ID:', teamId);
+
+    const supabase = await createClient();
+
+    // 간단하게 토큰만 생성
+    const token = uuidv4();
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const inviteLink = `${baseUrl}/team/join?token=${token}`;
+
+    console.log('생성된 링크:', inviteLink);
+
+    // 데이터베이스에 저장 시도
+    try {
+      const { error } = await supabase
+        .from('team_invitations')
+        .insert({
+          email,
+          token,
+          team_id: teamId,
+          status: 'pending',
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+
+      if (error) {
+        console.error('DB 저장 에러:', error);
+        throw error;
+      }
+    } catch (dbError: any) {
+      console.error('DB 에러 상세:', dbError);
+      return NextResponse.json({
+        success: false,
+        message: `DB 에러: ${dbError.message}`,
+        inviteLink, // 에러가 나도 링크는 전달
+      }, { status: 200 }); // 200으로 보내서 일단 링크는 복사 가능하게
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '초대 링크가 생성되었습니다.',
+      token,
+      inviteLink,
+    });
+  } catch (error: any) {
+    console.error('전체 에러:', error);
+    return NextResponse.json({
+      success: false,
+      message: error.message || '서버 오류',
+    }, { status: 500 });
+  }
+}

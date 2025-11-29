@@ -1,8 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import { MoreHorizontal, Plus, Filter, SlidersHorizontal } from 'lucide-react';
+
+// 동적 임포트로 모달 로드
+const CreateIssueModalWithDB = dynamic(() => import('./CreateIssueModalWithDB'), { ssr: false });
 
 // =============================================
 // 타입 정의
@@ -43,8 +47,16 @@ interface Issue {
   labels?: Label[];
 }
 
+interface Project {
+  id: string;
+  name: string;
+  team_id: string;
+}
+
 interface ProjectKanbanWithDBProps {
   projectId: string;
+  projects?: Project[];
+  onProjectChange?: (projectId: string) => void;
   handleOpenIssue?: (issue: Issue) => void;
 }
 
@@ -54,9 +66,14 @@ interface ProjectKanbanWithDBProps {
 
 const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
   projectId,
+  projects = [],
+  onProjectChange,
   handleOpenIssue
 }) => {
   const supabase = createClient();
+
+  // 현재 선택된 프로젝트 정보
+  const currentProject = projects.find(p => p.id === projectId);
 
   // State
   const [statuses, setStatuses] = useState<ProjectStatus[]>([]);
@@ -64,6 +81,7 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draggedIssue, setDraggedIssue] = useState<Issue | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // =============================================
   // 데이터 로드
@@ -72,16 +90,22 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
   // 프로젝트 상태(칸반 컬럼) 조회
   const fetchStatuses = async () => {
     try {
+      console.log('🔄 Fetching statuses for project:', projectId);
       const { data, error } = await supabase
         .from('project_statuses')
         .select('id, name, color, position, wip_limit')
         .eq('project_id', projectId)
         .order('position', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Statuses query error:', error);
+        throw error;
+      }
+
+      console.log('✅ Statuses data:', data);
       setStatuses(data || []);
     } catch (err) {
-      console.error('Error fetching statuses:', err);
+      console.error('❌ Error fetching statuses:', err);
       setError('상태 목록을 불러오는데 실패했습니다.');
     }
   };
@@ -284,10 +308,28 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
       {/* Kanban Header */}
       <div className="h-12 border-b border-slate-100 flex items-center justify-between px-4 bg-white sticky top-0 z-10">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 bg-brand-500 rounded-sm flex items-center justify-center text-[8px] text-white">
-            L
-          </div>
-          <span className="font-semibold text-sm text-slate-800">Project Issues</span>
+          {projects.length > 0 ? (
+            <select
+              value={projectId}
+              onChange={(e) => onProjectChange?.(e.target.value)}
+              className="font-semibold text-sm text-slate-800 bg-transparent border border-slate-200 rounded px-2 py-1 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+            >
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 bg-brand-500 rounded-sm flex items-center justify-center text-[8px] text-white">
+                {currentProject?.name.charAt(0).toUpperCase() || 'P'}
+              </div>
+              <span className="font-semibold text-sm text-slate-800">
+                {currentProject?.name || 'Project Issues'}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded">
@@ -303,22 +345,23 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
 
       {/* Kanban Board */}
       <div className="flex-1 overflow-x-auto p-0 flex">
-        {issues.length === 0 && statuses.length > 0 ? (
+        {statuses.length === 0 ? (
           <div className="flex-1 flex items-center justify-center bg-slate-50">
             <div className="text-center max-w-md px-4">
-              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Plus size={32} className="text-slate-400" />
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
               </div>
-              <h3 className="text-lg font-semibold text-slate-700 mb-2">프로젝트가 비어있습니다</h3>
+              <h3 className="text-lg font-semibold text-slate-700 mb-2">프로젝트 상태가 없습니다</h3>
               <p className="text-sm text-slate-500 mb-6">
-                첫 이슈를 만들어 프로젝트를 시작하세요
+                데이터베이스에서 기본 상태(Backlog, In Progress, Done)를 추가해야 합니다.
+                <br />
+                <code className="text-xs bg-slate-100 px-2 py-1 rounded mt-2 inline-block">
+                  supabase/FIX_add_default_statuses.sql
+                </code>
+                파일을 실행하세요.
               </p>
-              <button
-                className="inline-flex items-center gap-2 bg-brand-500 text-white px-4 py-2 rounded-lg hover:bg-brand-600 transition-colors shadow-sm font-medium"
-              >
-                <Plus size={16} />
-                첫 이슈 만들기
-              </button>
             </div>
           </div>
         ) : (
@@ -397,7 +440,10 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
                 ))}
 
                 {/* Add Button */}
-                <button className="w-full py-1.5 flex items-center gap-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded transition-colors text-xs font-medium px-2">
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="w-full py-1.5 flex items-center gap-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded transition-colors text-xs font-medium px-2"
+                >
                   <Plus size={14} />
                   <span>New issue</span>
                 </button>
@@ -415,6 +461,17 @@ const ProjectKanbanWithDB: React.FC<ProjectKanbanWithDBProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Create Issue Modal */}
+      {showCreateModal && (
+        <CreateIssueModalWithDB
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => {
+            // 이슈 생성 성공 시 목록 새로고침
+            fetchIssues();
+          }}
+        />
+      )}
     </div>
   );
 };

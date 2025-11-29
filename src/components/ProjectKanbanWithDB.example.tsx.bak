@@ -11,16 +11,14 @@ export default function ProjectBoardPage({ params }: { params: { id: string } })
 
   return (
     <div className="h-screen">
-      <ProjectKanbanWithDB 
+      <ProjectKanbanWithDB
         projectId={params.id}
-        onOpenIssue={(issue) => setSelectedIssue(issue)}
       />
 
       {/* 이슈 상세 모달 */}
       {selectedIssue && (
-        <IssueDetail 
-          issue={selectedIssue}
-          onClose={() => setSelectedIssue(null)}
+        <IssueDetail
+          issueId={selectedIssue.id}
         />
       )}
     </div>

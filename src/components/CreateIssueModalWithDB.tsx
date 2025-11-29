@@ -20,6 +20,12 @@ interface SimilarIssue {
     title: string;
 }
 
+interface ProjectStatus {
+    id: string;
+    name: string;
+    color: string | null;
+}
+
 const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSuccess }) => {
     const supabase = createClient();
 
@@ -33,6 +39,10 @@ const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSu
     // Projects list
     const [projects, setProjects] = useState<Project[]>([]);
     const [loadingProjects, setLoadingProjects] = useState(true);
+
+    // Statuses list
+    const [statuses, setStatuses] = useState<ProjectStatus[]>([]);
+    const [selectedStatusId, setSelectedStatusId] = useState('');
 
     // AI features state
     const [duplicates, setDuplicates] = useState<SimilarIssue[]>([]);
@@ -76,7 +86,42 @@ const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSu
     }, []);
 
     // =============================================
-    // 2. AI 중복 검사 - 실제 DB에서 유사 이슈 검색
+    // 2. 프로젝트 상태 목록 조회
+    // =============================================
+    useEffect(() => {
+        const fetchStatuses = async () => {
+            if (!selectedProjectId) {
+                setStatuses([]);
+                setSelectedStatusId('');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('project_statuses')
+                    .select('id, name, color')
+                    .eq('project_id', selectedProjectId)
+                    .order('position', { ascending: true });
+
+                if (error) throw error;
+
+                setStatuses(data || []);
+
+                // 첫 번째 상태를 기본 선택 (Backlog)
+                if (data && data.length > 0) {
+                    setSelectedStatusId(data[0].id);
+                }
+            } catch (err) {
+                console.error('Error fetching statuses:', err);
+                // 상태 조회 실패는 에러로 표시하지 않음 (선택적 기능)
+            }
+        };
+
+        fetchStatuses();
+    }, [selectedProjectId]);
+
+    // =============================================
+    // 3. AI 중복 검사 - 실제 DB에서 유사 이슈 검색
     // =============================================
     useEffect(() => {
         const checkDuplicates = async () => {
@@ -183,17 +228,8 @@ const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSu
                 throw new Error('로그인이 필요합니다.');
             }
 
-            // 프로젝트의 기본 status 조회 (is_default=true 또는 position이 가장 작은 것)
-            const { data: defaultStatus, error: statusError } = await supabase
-                .from('project_statuses')
-                .select('id')
-                .eq('project_id', selectedProjectId)
-                .order('position', { ascending: true })
-                .limit(1)
-                .single();
-
-            if (statusError || !defaultStatus) {
-                throw new Error('프로젝트의 기본 상태를 찾을 수 없습니다.');
+            if (!selectedStatusId) {
+                throw new Error('상태를 선택해주세요.');
             }
 
             // 이슈 생성
@@ -207,7 +243,7 @@ const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSu
                     type: 'TASK', // 기본 타입
                     priority: selectedPriority,
                     reporter_id: user.id,
-                    status_id: defaultStatus.id,
+                    status_id: selectedStatusId,
                 })
                 .select('id, issue_key')
                 .single();
@@ -352,7 +388,7 @@ const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSu
                     )}
 
                     {/* Properties Row */}
-                    <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div className="grid grid-cols-3 gap-4 pt-2">
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
                                 Project
@@ -375,6 +411,29 @@ const CreateIssueModalWithDB: React.FC<CreateIssueModalProps> = ({ onClose, onSu
                                     {projects.map(project => (
                                         <option key={project.id} value={project.id}>
                                             {project.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                                Status
+                            </label>
+                            {statuses.length === 0 ? (
+                                <div className="w-full bg-slate-50 border border-slate-200 rounded-md py-1.5 px-2 text-sm text-slate-400">
+                                    No statuses
+                                </div>
+                            ) : (
+                                <select
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-md py-1.5 px-2 text-sm text-slate-700 focus:outline-none focus:border-slate-300 disabled:opacity-50"
+                                    value={selectedStatusId}
+                                    onChange={(e) => setSelectedStatusId(e.target.value)}
+                                    disabled={isCreating}
+                                >
+                                    {statuses.map(status => (
+                                        <option key={status.id} value={status.id}>
+                                            {status.name}
                                         </option>
                                     ))}
                                 </select>

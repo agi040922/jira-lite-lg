@@ -9,27 +9,33 @@ import { createClient } from '@/lib/supabase/client';
 const AppLayout = dynamic(() => import('@/components/AppLayout'), { ssr: false });
 const ProjectKanbanWithDB = dynamic(() => import('@/components/ProjectKanbanWithDB'), { ssr: false });
 
+interface Project {
+  id: string;
+  name: string;
+  team_id: string;
+}
+
 export default function IssuesPage() {
   const router = useRouter();
   const { userId, loading: authLoading } = useUserId(true);
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
-  // 사용자의 첫 번째 프로젝트 ID 가져오기
+  // 사용자의 모든 프로젝트 가져오기
   useEffect(() => {
-    const fetchFirstProject = async () => {
+    const fetchProjects = async () => {
       if (!userId) return;
 
       try {
         console.log('🔍 Fetching projects for user:', userId);
 
-        // 사용자가 속한 팀의 첫 번째 프로젝트 조회 (single 제거)
+        // 사용자가 속한 팀의 모든 프로젝트 조회
         const { data: memberData, error: memberError } = await supabase
           .from('team_members')
           .select('team_id')
-          .eq('user_id', userId)
-          .limit(1);
+          .eq('user_id', userId);
 
         if (memberError) {
           console.error('❌ Error fetching team membership:', memberError);
@@ -39,34 +45,35 @@ export default function IssuesPage() {
         console.log('📊 Team membership data:', memberData);
 
         if (memberData && memberData.length > 0) {
-          const teamId = memberData[0].team_id;
-          console.log('🏢 Team ID:', teamId);
+          const teamIds = memberData.map(m => m.team_id);
+          console.log('🏢 Team IDs:', teamIds);
 
           const { data: projectData, error: projectError } = await supabase
             .from('projects')
-            .select('id')
-            .eq('team_id', teamId)
+            .select('id, name, team_id')
+            .in('team_id', teamIds)
             .is('deleted_at', null)
-            .limit(1);
+            .order('created_at', { ascending: false });
 
           if (projectError) {
-            console.error('❌ Error fetching project:', projectError);
+            console.error('❌ Error fetching projects:', projectError);
             throw projectError;
           }
 
-          console.log('📁 Project data:', projectData);
+          console.log('📁 Projects data:', projectData);
 
           if (projectData && projectData.length > 0) {
-            setProjectId(projectData[0].id);
-            console.log('✅ Project found:', projectData[0].id);
+            setProjects(projectData);
+            setSelectedProjectId(projectData[0].id);
+            console.log('✅ Projects found:', projectData.length);
           } else {
-            console.log('⚠️ No projects found for team:', teamId);
+            console.log('⚠️ No projects found for teams:', teamIds);
           }
         } else {
           console.log('⚠️ User is not a member of any team');
         }
       } catch (err: any) {
-        console.error('❌ Error fetching project (detailed):', {
+        console.error('❌ Error fetching projects (detailed):', {
           message: err?.message,
           details: err?.details,
           hint: err?.hint,
@@ -79,7 +86,7 @@ export default function IssuesPage() {
     };
 
     if (userId) {
-      fetchFirstProject();
+      fetchProjects();
     }
   }, [userId, supabase]);
 
@@ -97,7 +104,7 @@ export default function IssuesPage() {
 
   if (!userId) return null;
 
-  if (!projectId) {
+  if (projects.length === 0 && !loading) {
     return (
       <AppLayout currentView="team_issues" title="All Issues">
         <div className="flex items-center justify-center h-full bg-white">
@@ -126,10 +133,14 @@ export default function IssuesPage() {
     );
   }
 
+  if (!selectedProjectId) return null;
+
   return (
     <AppLayout currentView="team_issues" title="All Issues">
       <ProjectKanbanWithDB
-        projectId={projectId}
+        projectId={selectedProjectId}
+        projects={projects}
+        onProjectChange={setSelectedProjectId}
         handleOpenIssue={handleOpenIssue}
       />
     </AppLayout>

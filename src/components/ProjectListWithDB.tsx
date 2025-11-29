@@ -178,6 +178,8 @@ const ProjectListWithDB: React.FC<ProjectListWithDBProps> = ({ teamId }) => {
 
           return {
             ...project,
+            team: Array.isArray(project.team) ? project.team[0] : project.team,
+            owner: Array.isArray(project.owner) ? project.owner[0] : project.owner,
             issue_count: issueCount || 0,
             is_favorite: !!favoriteData,
           };

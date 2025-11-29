@@ -96,7 +96,7 @@ export default function TeamIssuesPage() {
 
   return (
     <AppLayout currentView="team_issues" title="Team Issues">
-      <ProjectKanbanWithDB projectId={projectId} onOpenIssue={() => {}} />
+      <ProjectKanbanWithDB projectId={projectId} />
     </AppLayout>
   );
 }

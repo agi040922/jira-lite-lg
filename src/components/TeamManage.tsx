@@ -122,8 +122,13 @@ const TeamManage: React.FC<TeamManageProps> = ({ teamId }) => {
       }
 
       if (members && members.length > 0) {
-        setTeamMembers(members as TeamMember[]);
-        setCurrentTeam((members[0] as TeamMember).team);
+        const formattedMembers = members.map((m: any) => ({
+          ...m,
+          user: Array.isArray(m.user) ? m.user[0] : m.user,
+          team: Array.isArray(m.team) ? m.team[0] : m.team,
+        }));
+        setTeamMembers(formattedMembers as TeamMember[]);
+        setCurrentTeam(formattedMembers[0].team);
       }
     } catch (error) {
       console.error('데이터 로드 중 오류:', error);

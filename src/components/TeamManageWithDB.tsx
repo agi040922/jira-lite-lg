@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Mail, Shield, Trash2, MoreVertical, Plus, Loader2, X } from 'lucide-react';
+import { Mail, Shield, Trash2, MoreVertical, Plus, Loader2, X, Copy, Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useTeam } from '@/components/providers/TeamContext';
 
@@ -42,6 +42,8 @@ const TeamManageWithDB: React.FC = () => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'ADMIN' | 'MEMBER'>('MEMBER');
   const [processingAction, setProcessingAction] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // 데이터 로드
   useEffect(() => {
@@ -169,13 +171,13 @@ const TeamManageWithDB: React.FC = () => {
   // 멤버 초대 (실제로는 이메일로 사용자를 찾아서 team_members에 추가)
   const handleInviteMember = async () => {
     if (!currentTeam || !inviteEmail.trim()) {
-      alert('이메일을 입력해주세요.');
+      showToast('이메일을 입력해주세요.');
       return;
     }
 
     // 권한 확인
     if (currentUserRole !== 'OWNER' && currentUserRole !== 'ADMIN') {
-      alert('멤버를 초대할 권한이 없습니다.');
+      showToast('멤버를 초대할 권한이 없습니다.');
       return;
     }
 
@@ -190,7 +192,7 @@ const TeamManageWithDB: React.FC = () => {
         .single();
 
       if (userError || !inviteUser) {
-        alert('해당 이메일의 사용자를 찾을 수 없습니다. 먼저 회원가입이 필요합니다.');
+        showToast('해당 이메일의 사용자를 찾을 수 없습니다. 먼저 회원가입이 필요합니다.');
         return;
       }
 
@@ -203,7 +205,7 @@ const TeamManageWithDB: React.FC = () => {
         .single();
 
       if (existingMember) {
-        alert('이미 팀에 속한 멤버입니다.');
+        showToast('이미 팀에 속한 멤버입니다.');
         return;
       }
 
@@ -218,22 +220,86 @@ const TeamManageWithDB: React.FC = () => {
 
       if (insertError) {
         console.error('멤버 추가 오류:', insertError);
-        alert('멤버 초대 중 오류가 발생했습니다.');
+        showToast('멤버 초대 중 오류가 발생했습니다.');
         return;
       }
 
       // 성공 후 데이터 새로고침 및 모달 닫기
-      alert('멤버가 성공적으로 초대되었습니다.');
+      showToast('멤버가 성공적으로 초대되었습니다.');
       setIsInviteModalOpen(false);
       setInviteEmail('');
       setInviteRole('MEMBER');
       await loadTeamMembers();
     } catch (error) {
       console.error('멤버 초대 중 오류:', error);
-      alert('멤버 초대 중 오류가 발생했습니다.');
+      showToast('멤버 초대 중 오류가 발생했습니다.');
     } finally {
       setProcessingAction(null);
     }
+  };
+
+  // 초대 링크 생성 및 복사
+  const handleGenerateInviteLink = async () => {
+    if (!currentTeam || !inviteEmail.trim()) {
+      showToast('이메일을 입력해주세요.');
+      return;
+    }
+
+    // 권한 확인
+    if (currentUserRole !== 'OWNER' && currentUserRole !== 'ADMIN') {
+      showToast('멤버를 초대할 권한이 없습니다.');
+      return;
+    }
+
+    try {
+      setProcessingAction('generate-link');
+
+      // 현재 사용자 정보 가져오기
+      const { data: { user } } = await supabase.auth.getUser();
+      const invitedBy = user?.email || '관리자';
+
+      // API 호출하여 초대 링크 생성
+      const response = await fetch('/api/generate-invite-link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          invitedBy,
+          teamId: currentTeam.id,
+          role: inviteRole,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        showToast(data.message);
+        return;
+      }
+
+      // 클립보드에 복사
+      if (data.inviteLink) {
+        await navigator.clipboard.writeText(data.inviteLink);
+        setCopiedLink(true);
+        showToast('초대 링크가 클립보드에 복사되었습니다! 📋');
+
+        // 2초 후 체크 아이콘 제거
+        setTimeout(() => setCopiedLink(false), 2000);
+      }
+    } catch (error) {
+      console.error('초대 링크 생성 중 오류:', error);
+      showToast('초대 링크 생성 중 오류가 발생했습니다.');
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
+  // 토스트 메시지 표시
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
   // 역할 배지 스타일 결정
@@ -434,20 +500,36 @@ const TeamManageWithDB: React.FC = () => {
                   <option value="ADMIN">ADMIN</option>
                 </select>
               </div>
-              <div className="flex gap-2 pt-4">
+              <div className="space-y-3 pt-4">
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleInviteMember}
+                    disabled={processingAction === 'invite'}
+                    className="flex-1 bg-brand-500 text-white px-4 py-2 rounded-lg hover:bg-brand-600 transition-colors text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {processingAction === 'invite' && <Loader2 size={16} className="animate-spin" />}
+                    직접 초대하기
+                  </button>
+                  <button
+                    onClick={handleGenerateInviteLink}
+                    disabled={processingAction === 'generate-link'}
+                    className="flex-1 bg-slate-700 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {processingAction === 'generate-link' ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : copiedLink ? (
+                      <Check size={16} />
+                    ) : (
+                      <Copy size={16} />
+                    )}
+                    {copiedLink ? '복사됨!' : '링크 복사'}
+                  </button>
+                </div>
                 <button
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="flex-1 border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
+                  className="w-full border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
                 >
-                  취소
-                </button>
-                <button
-                  onClick={handleInviteMember}
-                  disabled={processingAction === 'invite'}
-                  className="flex-1 bg-brand-500 text-white px-4 py-2 rounded-lg hover:bg-brand-600 transition-colors text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {processingAction === 'invite' && <Loader2 size={16} className="animate-spin" />}
-                  초대하기
+                  닫기
                 </button>
               </div>
             </div>
@@ -473,6 +555,13 @@ const TeamManageWithDB: React.FC = () => {
           멤버 초대하기
         </button>
       </div>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-4 right-4 bg-slate-900 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50 animate-in slide-in-from-bottom-5">
+          <span className="text-sm">{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 };

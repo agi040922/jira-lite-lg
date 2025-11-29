@@ -190,28 +190,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onCompose 
         {isTeamDropdownOpen && (
           <div className="fixed inset-0 z-40" onClick={() => setIsTeamDropdownOpen(false)} />
         )}
-
-        <div className="flex items-center gap-1">
-            <button className="p-1.5 text-slate-500 hover:bg-slate-200/50 rounded-md">
-                <Search size={16} />
-            </button>
         </div>
-      </div>
 
-      <div className="px-3 mb-2">
-        <button 
-            onClick={onCompose}
-            className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white py-2 rounded-md text-sm font-medium transition-colors shadow-sm"
-        >
-            <PenSquare size={16} />
-            <span>New Issue</span>
-        </button>
-      </div>
+
+
 
       <div className="flex-1 overflow-y-auto py-2 px-3 space-y-6">
         {/* Primary Nav */}
         <div className="space-y-0.5">
-            <NavItem id="pulse" icon={Zap} label="Pulse" />
+
             <NavItem 
                 id="inbox" 
                 icon={Inbox} 
@@ -265,13 +252,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onCompose 
                     label="Views" 
                     active={currentView === 'views'}
                     onClick={() => onChangeView('views')}
-                />
-                <NavItem 
-                    id="trash" 
-                    icon={Trash2} 
-                    label="Trash" 
-                    active={currentView === 'trash'}
-                    onClick={() => onChangeView('trash')}
                 />
                 <NavItem id="more" icon={MoreHorizontal} label="More" />
             </div>
@@ -338,6 +318,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onCompose 
         {/* Settings at bottom of list */}
         <div>
              <div className="space-y-0.5">
+                <NavItem 
+                    id="trash" 
+                    icon={Trash2} 
+                    label="Trash" 
+                    active={currentView === 'trash'}
+                    onClick={() => onChangeView('trash')}
+                />
                 <NavItem 
                     id="settings" 
                     icon={Settings} 

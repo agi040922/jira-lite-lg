@@ -71,12 +71,15 @@ const ProjectKanban: React.FC<ProjectKanbanProps> = ({ projectId, onOpenIssue })
                     assignee: issue.assignee ? {
                         id: issue.assignee.id,
                         name: issue.assignee.full_name || issue.assignee.email,
-                        avatar: issue.assignee.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${issue.assignee.email}`
+                        email: issue.assignee.email,
+                        avatar: issue.assignee.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${issue.assignee.email}`,
+                        role: issue.assignee.role || 'member'
                     } : undefined,
                     labels: (issue.issue_labels || []).map((il: any) => il.label?.name).filter(Boolean),
                     createdAt: issue.created_at,
-                    updatedAt: issue.updated_at,
-                    projectId: issue.project_id
+                    projectId: issue.project_id,
+                    subtasks: [],
+                    commentsCount: 0
                 };
 
                 if (grouped[issue.status_id]) {
@@ -131,7 +134,7 @@ const ProjectKanban: React.FC<ProjectKanbanProps> = ({ projectId, onOpenIssue })
                 );
 
                 // 새 컬럼에 추가
-                const updatedIssue = { ...draggedIssue, status: targetStatusId };
+                const updatedIssue = { ...draggedIssue, status: targetStatusId as any };
                 newState[targetStatusId] = [...(newState[targetStatusId] || []), updatedIssue];
 
                 return newState;

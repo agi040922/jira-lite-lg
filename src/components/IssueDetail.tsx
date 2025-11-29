@@ -61,7 +61,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issueId }) => {
         `)
         .eq('issue_id', issueId);
 
-      const labels = labelsData?.map(il => il.labels).filter(Boolean) as Label[] || [];
+      const labels = labelsData?.map(il => il.labels).filter(Boolean).flat() as Label[] || [];
 
       // 서브태스크 조회
       const { data: subtasksData } = await supabase

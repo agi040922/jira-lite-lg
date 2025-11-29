@@ -15,12 +15,13 @@ interface IssueGroupProps {
 }
 
 // Status enum을 DB 데이터와 매칭하기 위한 맵
+// 실제 DB에 저장된 status name: 'Backlog', 'In Progress', 'Done'
 const STATUS_MAP = {
-  TODO: 'TODO',
-  IN_PROGRESS: 'IN_PROGRESS',
-  IN_REVIEW: 'IN_REVIEW',
-  DONE: 'DONE',
-  BACKLOG: 'BACKLOG',
+  TODO: 'Todo',
+  IN_PROGRESS: 'In Progress',
+  IN_REVIEW: 'In Review',
+  DONE: 'Done',
+  BACKLOG: 'Backlog',
 } as const;
 
 const getPriorityIcon = (priority: DBPriority) => {
@@ -188,7 +189,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userId, title = "My issues", onOp
             const issueLabels = labelsData
               ?.filter(il => il.issue_id === issue.id)
               .map(il => il.labels)
-              .filter((label): label is Label => label !== null) || [];
+              .filter((label): label is NonNullable<typeof label> => label !== null) || [];
 
             return {
               ...issue,
@@ -215,6 +216,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userId, title = "My issues", onOp
 
   // 상태별로 이슈 그룹화
   const inReviewIssues = issues.filter(i => i.status?.name === STATUS_MAP.IN_REVIEW);
+  const inProgressIssues = issues.filter(i => i.status?.name === STATUS_MAP.IN_PROGRESS);
   const todoIssues = issues.filter(i => i.status?.name === STATUS_MAP.TODO);
   const backlogIssues = issues.filter(i => i.status?.name === STATUS_MAP.BACKLOG);
   const doneIssues = issues.filter(i => i.status?.name === STATUS_MAP.DONE);
@@ -293,6 +295,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userId, title = "My issues", onOp
                         statusName={STATUS_MAP.IN_REVIEW}
                         issues={inReviewIssues}
                         icon={<Clock size={16} className="text-yellow-500" />}
+                        onOpenIssue={onOpenIssue}
+                    />
+                    <IssueGroup
+                        label="In Progress"
+                        statusName={STATUS_MAP.IN_PROGRESS}
+                        issues={inProgressIssues}
+                        icon={<Clock size={16} className="text-blue-500" />}
                         onOpenIssue={onOpenIssue}
                     />
                     <IssueGroup

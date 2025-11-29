@@ -62,7 +62,10 @@ const ProjectForm: React.FC = () => {
           return;
         }
 
-        setTeamMembers(members || []);
+        setTeamMembers((members || []).map((m: any) => ({
+          ...m,
+          user: Array.isArray(m.user) ? m.user[0] : m.user
+        })));
         
         // 현재 사용자를 기본 owner로 설정
         setOwnerId(user.id);
