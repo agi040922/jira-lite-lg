@@ -65,14 +65,18 @@ export default function EditorTestPage() {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.from('posts').insert({
-        title: title.trim(),
-        content_html: content,
-      });
+      // id, created_at, updated_at은 DB에서 자동 생성되므로 제외
+      const { data, error } = await supabase
+        .from('posts')
+        .insert({
+          title: title.trim(),
+          content_html: content,
+        })
+        .select();
 
       if (error) {
         console.error('게시글 저장 실패:', error);
-        alert('게시글 저장에 실패했습니다.');
+        alert(`게시글 저장에 실패했습니다: ${error.message}`);
         return;
       }
 

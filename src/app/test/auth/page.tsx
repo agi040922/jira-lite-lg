@@ -125,7 +125,7 @@ export default function AuthTestPage() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/test/auth`,
+          redirectTo: `${window.location.origin}/auth/callback`,
           // Google에서 제공하는 추가 정보 요청 (프로필, 이메일)
           queryParams: {
             access_type: 'offline',

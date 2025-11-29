@@ -8,6 +8,7 @@ export interface Post {
   title: string;
   content_html: string;
   created_at: string;
+  updated_at: string;
 }
 
 // react-quill 기본 타입
