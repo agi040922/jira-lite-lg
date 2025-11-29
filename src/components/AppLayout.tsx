@@ -63,7 +63,7 @@ export default function AppLayout({ children, currentView, title }: AppLayoutPro
         {/* Scrollable Content Area */}
         <main className="flex-1 overflow-hidden">
           {typeof children === 'object' && children && 'type' in children
-            ? React.cloneElement(children as React.ReactElement, { onOpenIssue: handleOpenIssue })
+            ? React.cloneElement(children as React.ReactElement, { onOpenIssue: handleOpenIssue } as any)
             : children}
         </main>
       </div>

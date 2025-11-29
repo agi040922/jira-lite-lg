@@ -208,9 +208,11 @@ export default function RichTextEditor({
     'image',
   ];
 
+  const QuillComponent = ReactQuill as any;
+
   return (
     <div className="rich-text-editor">
-      <ReactQuill
+      <QuillComponent
         ref={quillRef}
         value={value}
         onChange={onChange}
