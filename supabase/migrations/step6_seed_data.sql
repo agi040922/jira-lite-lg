@@ -1,7 +1,8 @@
 -- =============================================
--- Jira Lite - 시드 데이터 (테스트용)
+-- STEP 6: 시드 데이터 (테스트용, 선택사항)
 -- =============================================
--- 002_create_functions.sql 실행 후 이 스크립트를 실행하세요.
+-- step1~5 실행 후 이 스크립트를 실행하세요.
+-- 실행 순서: 6번째 (선택사항, 테스트 환경에서만 사용)
 --
 -- 주의: 이 스크립트는 테스트 환경에서만 사용하세요.
 -- Supabase Auth로 사용자를 먼저 생성한 후 실행해야 합니다.
@@ -12,13 +13,6 @@
 -- - jm@lightsoft.com (MEMBER)
 -- - ms@lightsoft.com (MEMBER)
 
--- =============================================
--- 1. 테스트 사용자 데이터 (auth.users 생성 후 수동 실행)
--- =============================================
--- 참고: Supabase Auth에서 사용자 생성 시 자동으로 users 테이블에 추가됨
--- 아래는 직접 users 테이블에 데이터를 넣는 예시 (테스트용)
-
--- UUID 변수 선언 (실제 auth.users의 ID로 교체 필요)
 DO $$
 DECLARE
   user1_id UUID := gen_random_uuid();
@@ -43,12 +37,14 @@ DECLARE
   label_sales UUID;
   label_refactor UUID;
   label_feature UUID;
+  issue1_id UUID;
+  issue2_id UUID;
+  issue6_id UUID;
 BEGIN
 
   -- =============================================
-  -- 테스트 사용자 생성 (auth.users 연동 없이 테스트용)
+  -- 1. 테스트 사용자 생성
   -- =============================================
-
   -- 주의: 실제 환경에서는 auth.users에서 사용자를 생성하고
   -- 트리거로 자동 생성되도록 해야 합니다.
 
@@ -60,7 +56,7 @@ BEGIN
   ON CONFLICT (email) DO NOTHING;
 
   -- =============================================
-  -- 팀 생성
+  -- 2. 팀 생성
   -- =============================================
 
   INSERT INTO public.teams (id, name, owner_id)
@@ -68,17 +64,17 @@ BEGIN
   RETURNING id INTO team1_id;
 
   -- =============================================
-  -- 팀 멤버 추가
+  -- 3. 팀 멤버 추가 (트리거로 owner는 자동 추가됨)
   -- =============================================
 
   INSERT INTO public.team_members (team_id, user_id, role) VALUES
-    (team1_id, user1_id, 'OWNER'),
     (team1_id, user2_id, 'ADMIN'),
     (team1_id, user3_id, 'MEMBER'),
-    (team1_id, user4_id, 'MEMBER');
+    (team1_id, user4_id, 'MEMBER')
+  ON CONFLICT (team_id, user_id) DO NOTHING;
 
   -- =============================================
-  -- 프로젝트 생성 (기본 상태는 트리거로 자동 생성됨)
+  -- 4. 프로젝트 생성 (기본 상태는 트리거로 자동 생성됨)
   -- =============================================
 
   INSERT INTO public.projects (id, team_id, name, description, owner_id)
@@ -102,7 +98,7 @@ BEGIN
   RETURNING id INTO project5_id;
 
   -- =============================================
-  -- 프로젝트1에 커스텀 상태 추가 (Todo, In Review)
+  -- 5. 프로젝트1에 커스텀 상태 추가 (Todo, In Review)
   -- =============================================
 
   -- 기본 상태 ID 조회
@@ -129,7 +125,7 @@ BEGIN
   UPDATE public.project_statuses SET position = 4 WHERE id = status_done;
 
   -- =============================================
-  -- 라벨 생성
+  -- 6. 라벨 생성
   -- =============================================
 
   INSERT INTO public.labels (id, project_id, name, color) VALUES
@@ -161,46 +157,47 @@ BEGIN
   RETURNING id INTO label_feature;
 
   -- =============================================
-  -- 이슈 생성 (mockData 기반)
+  -- 7. 이슈 생성 (mockData 기반)
   -- =============================================
 
   -- LIG-325: 배포 스크립트 or 커맨드 제작
-  WITH inserted_issue AS (
-    INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, owner_id, due_date)
-    VALUES (
-      project1_id,
-      '배포 스크립트 or 커맨드 제작',
-      '자동 배포를 위한 스크립트를 작성해야 합니다.',
-      status_in_review,
-      'HIGH',
-      user1_id,
-      user1_id,
-      NULL
-    )
-    RETURNING id
+  INSERT INTO public.issues (id, project_id, title, description, status_id, priority, assignee_id, reporter_id, type)
+  VALUES (
+    gen_random_uuid(),
+    project1_id,
+    '배포 스크립트 or 커맨드 제작',
+    '자동 배포를 위한 스크립트를 작성해야 합니다.',
+    status_in_review,
+    'HIGH',
+    user1_id,
+    user1_id,
+    'TASK'
   )
+  RETURNING id INTO issue1_id;
+
   INSERT INTO public.issue_labels (issue_id, label_id)
-  SELECT id, label_devops FROM inserted_issue;
+  VALUES (issue1_id, label_devops);
 
   -- LIG-337: 홈페이지 개편
-  WITH inserted_issue AS (
-    INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, owner_id, due_date)
-    VALUES (
-      project1_id,
-      '홈페이지 개편',
-      '메인 페이지 UI를 전면 개편합니다.',
-      status_todo,
-      'MEDIUM',
-      user3_id,
-      user1_id,
-      '2025-12-02'
-    )
-    RETURNING id
+  INSERT INTO public.issues (id, project_id, title, description, status_id, priority, assignee_id, reporter_id, due_date, type)
+  VALUES (
+    gen_random_uuid(),
+    project1_id,
+    '홈페이지 개편',
+    '메인 페이지 UI를 전면 개편합니다.',
+    status_todo,
+    'MEDIUM',
+    user3_id,
+    user1_id,
+    '2025-12-02',
+    'FEATURE'
   )
+  RETURNING id INTO issue2_id;
+
   INSERT INTO public.issue_labels (issue_id, label_id)
-  SELECT id, label_design FROM inserted_issue
-  UNION ALL
-  SELECT id, label_frontend FROM inserted_issue;
+  VALUES
+    (issue2_id, label_design),
+    (issue2_id, label_frontend);
 
   -- LIG-235: 토스 페이먼츠 결제 기능 확인
   WITH project2_backlog AS (
@@ -208,7 +205,7 @@ BEGIN
     WHERE project_id = project2_id AND name = 'Backlog'
   ),
   inserted_issue AS (
-    INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, owner_id)
+    INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, reporter_id, type)
     SELECT
       project2_id,
       '토스 페이먼츠 결제 기능 확인',
@@ -216,7 +213,8 @@ BEGIN
       (SELECT id FROM project2_backlog),
       'HIGH',
       user4_id,
-      user1_id
+      user1_id,
+      'TASK'
     RETURNING id
   )
   INSERT INTO public.issue_labels (issue_id, label_id)
@@ -227,7 +225,7 @@ BEGIN
     SELECT id FROM public.project_statuses
     WHERE project_id = project3_id AND name = 'Backlog'
   )
-  INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, owner_id)
+  INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, reporter_id, type)
   SELECT
     project3_id,
     'ivma 견적 보내기',
@@ -235,14 +233,15 @@ BEGIN
     (SELECT id FROM project3_backlog),
     'LOW',
     user4_id,
-    user1_id;
+    user1_id,
+    'TASK';
 
   -- LIG-279: 개발현황 공유
   WITH project3_backlog AS (
     SELECT id FROM public.project_statuses
     WHERE project_id = project3_id AND name = 'Backlog'
   )
-  INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, owner_id)
+  INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, reporter_id, type)
   SELECT
     project3_id,
     '개발현황 공유',
@@ -250,28 +249,30 @@ BEGIN
     (SELECT id FROM project3_backlog),
     'LOW',
     user4_id,
-    user1_id;
+    user1_id,
+    'TASK';
 
   -- LIG-252: 하드코딩된 계좌번호 수정
-  WITH inserted_issue AS (
-    INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, owner_id)
-    VALUES (
-      project1_id,
-      '하드코딩된 계좌번호 수정',
-      '환경변수로 분리 필요',
-      status_done,
-      'HIGH',
-      user1_id,
-      user1_id
-    )
-    RETURNING id
+  INSERT INTO public.issues (id, project_id, title, description, status_id, priority, assignee_id, reporter_id, type)
+  VALUES (
+    gen_random_uuid(),
+    project1_id,
+    '하드코딩된 계좌번호 수정',
+    '환경변수로 분리 필요',
+    status_done,
+    'HIGH',
+    user1_id,
+    user1_id,
+    'BUG'
   )
+  RETURNING id INTO issue6_id;
+
   INSERT INTO public.issue_labels (issue_id, label_id)
-  SELECT id, label_refactor FROM inserted_issue;
+  VALUES (issue6_id, label_refactor);
 
   -- LIG-246: 신규 게시글 추가
   WITH inserted_issue AS (
-    INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, owner_id)
+    INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, reporter_id, type)
     VALUES (
       project1_id,
       '신규 게시글 추가',
@@ -279,7 +280,8 @@ BEGIN
       status_done,
       'MEDIUM',
       user1_id,
-      user1_id
+      user1_id,
+      'FEATURE'
     )
     RETURNING id
   )
@@ -292,7 +294,7 @@ BEGIN
     WHERE project_id = project2_id AND name = 'Done'
   ),
   inserted_issue AS (
-    INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, owner_id)
+    INSERT INTO public.issues (project_id, title, description, status_id, priority, assignee_id, reporter_id, type)
     SELECT
       project2_id,
       '팝업 생성 - 창 1개만 만들어지고 탭 구분으로만 공지를 볼 수 있어서 창 여러개로 올라오도록 변경',
@@ -300,64 +302,47 @@ BEGIN
       (SELECT id FROM project2_done),
       'LOW',
       user3_id,
-      user1_id
+      user1_id,
+      'FEATURE'
     RETURNING id
   )
   INSERT INTO public.issue_labels (issue_id, label_id)
   SELECT id, label_feature FROM inserted_issue;
 
   -- =============================================
-  -- 샘플 댓글 추가
+  -- 8. 샘플 댓글 추가
   -- =============================================
 
   -- LIG-252에 댓글 추가 (완료된 이슈)
   INSERT INTO public.comments (issue_id, user_id, content)
-  SELECT i.id, user1_id, '환경변수로 분리 완료했습니다.'
-  FROM public.issues i WHERE i.title = '하드코딩된 계좌번호 수정';
+  VALUES (issue6_id, user1_id, '환경변수로 분리 완료했습니다.');
 
   INSERT INTO public.comments (issue_id, user_id, content)
-  SELECT i.id, user2_id, '확인했습니다. 잘 동작하네요!'
-  FROM public.issues i WHERE i.title = '하드코딩된 계좌번호 수정';
+  VALUES (issue6_id, user2_id, '확인했습니다. 잘 동작하네요!');
 
   INSERT INTO public.comments (issue_id, user_id, content)
-  SELECT i.id, user1_id, '.env.example 파일도 업데이트해주세요.'
-  FROM public.issues i WHERE i.title = '하드코딩된 계좌번호 수정';
+  VALUES (issue6_id, user1_id, '.env.example 파일도 업데이트해주세요.');
 
   INSERT INTO public.comments (issue_id, user_id, content)
-  SELECT i.id, user1_id, '추가 완료!'
-  FROM public.issues i WHERE i.title = '하드코딩된 계좌번호 수정';
+  VALUES (issue6_id, user1_id, '추가 완료!');
 
   INSERT INTO public.comments (issue_id, user_id, content)
-  SELECT i.id, user3_id, 'LGTM 👍'
-  FROM public.issues i WHERE i.title = '하드코딩된 계좌번호 수정';
+  VALUES (issue6_id, user3_id, 'LGTM 👍');
 
   -- =============================================
-  -- 샘플 서브태스크 추가
+  -- 9. 샘플 서브태스크 추가
   -- =============================================
 
   -- 홈페이지 개편 이슈에 서브태스크 추가
-  INSERT INTO public.subtasks (issue_id, title, is_completed, position)
-  SELECT i.id, '디자인 시안 검토', true, 0
-  FROM public.issues i WHERE i.title = '홈페이지 개편';
-
-  INSERT INTO public.subtasks (issue_id, title, is_completed, position)
-  SELECT i.id, '반응형 레이아웃 구현', true, 1
-  FROM public.issues i WHERE i.title = '홈페이지 개편';
-
-  INSERT INTO public.subtasks (issue_id, title, is_completed, position)
-  SELECT i.id, '애니메이션 효과 추가', false, 2
-  FROM public.issues i WHERE i.title = '홈페이지 개편';
-
-  INSERT INTO public.subtasks (issue_id, title, is_completed, position)
-  SELECT i.id, 'SEO 최적화', false, 3
-  FROM public.issues i WHERE i.title = '홈페이지 개편';
-
-  INSERT INTO public.subtasks (issue_id, title, is_completed, position)
-  SELECT i.id, '브라우저 호환성 테스트', false, 4
-  FROM public.issues i WHERE i.title = '홈페이지 개편';
+  INSERT INTO public.subtasks (parent_issue_id, title, completed, position) VALUES
+    (issue2_id, '디자인 시안 검토', true, 0),
+    (issue2_id, '반응형 레이아웃 구현', true, 1),
+    (issue2_id, '애니메이션 효과 추가', false, 2),
+    (issue2_id, 'SEO 최적화', false, 3),
+    (issue2_id, '브라우저 호환성 테스트', false, 4);
 
   -- =============================================
-  -- 프로젝트 즐겨찾기 추가
+  -- 10. 프로젝트 즐겨찾기 추가
   -- =============================================
 
   INSERT INTO public.project_favorites (project_id, user_id)
@@ -367,7 +352,7 @@ BEGIN
   VALUES (project2_id, user1_id);
 
   -- =============================================
-  -- 팀 활동 로그 추가
+  -- 11. 팀 활동 로그 추가
   -- =============================================
 
   INSERT INTO public.team_activity_logs (team_id, user_id, action_type, target_type, target_id, description)
@@ -380,7 +365,9 @@ BEGIN
     (team1_id, user2_id, 'project_created', 'project', project1_id, '프로젝트 "제이콘 토목 산업 작업"이 생성되었습니다.'),
     (team1_id, user3_id, 'project_created', 'project', project2_id, '프로젝트 "돌핀 CRM"이 생성되었습니다.');
 
-  RAISE NOTICE '시드 데이터가 성공적으로 추가되었습니다.';
+  RAISE NOTICE '✅ STEP 6 완료: 시드 데이터가 성공적으로 추가되었습니다.';
+  RAISE NOTICE '모든 마이그레이션이 완료되었습니다!';
+
 END $$;
 
 

@@ -76,7 +76,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onCompose 
         {/* Primary Nav */}
         <div className="space-y-0.5">
             <NavItem id="pulse" icon={Zap} label="Pulse" count={4} />
-            <NavItem id="inbox" icon={Inbox} label="Inbox" count={58} />
+            <NavItem 
+                id="inbox" 
+                icon={Inbox} 
+                label="Inbox" 
+                count={58} 
+                active={currentView === 'inbox'}
+                onClick={() => onChangeView('inbox')}
+            />
             <NavItem 
                 id="my_issues" 
                 icon={CheckCircle2} 
@@ -84,7 +91,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onCompose 
                 active={currentView === 'my_issues' || currentView === 'dashboard'} 
                 onClick={() => onChangeView('my_issues')}
             />
-            <NavItem id="reviews" icon={RotateCcw} label="Reviews" count={2} />
+            <NavItem 
+                id="reviews" 
+                icon={RotateCcw} 
+                label="Reviews" 
+                count={2} 
+                active={currentView === 'reviews'}
+                onClick={() => onChangeView('reviews')}
+            />
         </div>
 
         {/* Workspace */}
@@ -108,7 +122,27 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, onCompose 
                     active={currentView === 'stats'}
                     onClick={() => onChangeView('stats')}
                 />
-                <NavItem id="views" icon={Layers} label="Views" />
+                <NavItem 
+                    id="views" 
+                    icon={Layers} 
+                    label="Views" 
+                    active={currentView === 'views'}
+                    onClick={() => onChangeView('views')}
+                />
+                <NavItem 
+                    id="settings" 
+                    icon={Settings} 
+                    label="Settings" 
+                    active={currentView === 'settings'}
+                    onClick={() => onChangeView('settings')}
+                />
+                <NavItem 
+                    id="morph_panel" 
+                    icon={Zap} 
+                    label="Morph Panel" 
+                    active={currentView === 'morph_panel'}
+                    onClick={() => window.location.href = '/test/morph-panel'}
+                />
                 <NavItem id="more" icon={MoreHorizontal} label="More" />
             </div>
         </div>

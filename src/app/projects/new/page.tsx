@@ -4,9 +4,9 @@ import dynamic from 'next/dynamic';
 import { useAuth } from '@/hooks/useAuth';
 
 const AppLayout = dynamic(() => import('@/components/AppLayout'), { ssr: false });
-const TeamStats = dynamic(() => import('@/components/TeamStats'), { ssr: false });
+const ProjectForm = dynamic(() => import('@/components/ProjectForm'), { ssr: false });
 
-export default function InsightsPage() {
+export default function NewProjectPage() {
   const { user, loading } = useAuth(true);
 
   if (loading) {
@@ -20,8 +20,8 @@ export default function InsightsPage() {
   if (!user) return null;
 
   return (
-    <AppLayout currentView="stats" title="Insights">
-      <TeamStats />
+    <AppLayout currentView="projects" title="New Project">
+      <ProjectForm />
     </AppLayout>
   );
 }

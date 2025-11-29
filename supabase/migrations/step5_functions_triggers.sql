@@ -1,7 +1,8 @@
 -- =============================================
--- Jira Lite - 함수 및 트리거 정의
+-- STEP 5: 함수 및 트리거 정의
 -- =============================================
--- 001_create_all_tables.sql 실행 후 이 스크립트를 실행하세요.
+-- step1~4 실행 후 이 스크립트를 실행하세요.
+-- 실행 순서: 5번째 (step4 실행 후)
 
 -- =============================================
 -- 1. 이슈 키 자동 생성 함수
@@ -15,11 +16,13 @@ DECLARE
   next_number INTEGER;
 BEGIN
   -- 해당 프로젝트의 다음 이슈 번호 계산
-  SELECT COALESCE(MAX(issue_number), 0) + 1 INTO next_number
+  SELECT COALESCE(
+    MAX(CAST(SUBSTRING(issue_key FROM '[0-9]+$') AS INTEGER)), 0
+  ) + 1 INTO next_number
   FROM public.issues
-  WHERE project_id = NEW.project_id;
+  WHERE project_id = NEW.project_id
+    AND issue_key ~ ('^' || prefix || '-[0-9]+$');
 
-  NEW.issue_number := next_number;
   NEW.issue_key := prefix || '-' || next_number;
 
   RETURN NEW;
@@ -30,6 +33,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trigger_generate_issue_key
   BEFORE INSERT ON public.issues
   FOR EACH ROW
+  WHEN (NEW.issue_key IS NULL)
   EXECUTE FUNCTION generate_issue_key();
 
 
@@ -115,7 +119,7 @@ CREATE TRIGGER trigger_check_issue_limit
 
 
 -- =============================================
--- 5. 이슈당 서브태스크 개수 제한 함수 (최대 20개)
+-- 5. 이슈당 서브태스크 개수 제한 함수 (최대 10개)
 -- =============================================
 
 CREATE OR REPLACE FUNCTION check_subtask_limit()
@@ -125,10 +129,10 @@ DECLARE
 BEGIN
   SELECT COUNT(*) INTO subtask_count
   FROM public.subtasks
-  WHERE issue_id = NEW.issue_id;
+  WHERE parent_issue_id = NEW.parent_issue_id;
 
-  IF subtask_count >= 20 THEN
-    RAISE EXCEPTION '이슈당 최대 20개의 서브태스크만 생성할 수 있습니다.';
+  IF subtask_count >= 10 THEN
+    RAISE EXCEPTION '이슈당 최대 10개의 서브태스크만 생성할 수 있습니다.';
   END IF;
 
   RETURN NEW;
@@ -281,7 +285,10 @@ CREATE TRIGGER trigger_record_issue_history
 -- 10. AI Rate Limit 체크 함수
 -- =============================================
 
-CREATE OR REPLACE FUNCTION check_ai_rate_limit(p_user_id UUID)
+CREATE OR REPLACE FUNCTION check_ai_rate_limit(
+  p_user_id UUID,
+  p_feature_type VARCHAR(30)
+)
 RETURNS TABLE (
   allowed BOOLEAN,
   minute_remaining INTEGER,
@@ -297,39 +304,27 @@ DECLARE
   minute_start TIMESTAMPTZ;
   day_start TIMESTAMPTZ;
 BEGIN
-  -- 분당 제한 체크
-  SELECT request_count, window_start INTO minute_count, minute_start
+  -- 분당 제한 체크 (최근 1분간)
+  SELECT COALESCE(SUM(request_count), 0) INTO minute_count
   FROM public.ai_rate_limits
-  WHERE user_id = p_user_id AND window_type = 'minute';
+  WHERE user_id = p_user_id
+    AND feature_type = p_feature_type
+    AND window_start >= NOW() - INTERVAL '1 minute';
 
-  -- 윈도우가 만료되었으면 리셋
-  IF minute_start IS NOT NULL AND minute_start < NOW() - INTERVAL '1 minute' THEN
-    DELETE FROM public.ai_rate_limits
-    WHERE user_id = p_user_id AND window_type = 'minute';
-    minute_count := 0;
-    minute_start := NULL;
-  END IF;
-
-  -- 일당 제한 체크
-  SELECT request_count, window_start INTO day_count, day_start
+  -- 일당 제한 체크 (최근 24시간)
+  SELECT COALESCE(SUM(request_count), 0) INTO day_count
   FROM public.ai_rate_limits
-  WHERE user_id = p_user_id AND window_type = 'day';
-
-  -- 윈도우가 만료되었으면 리셋
-  IF day_start IS NOT NULL AND day_start < NOW() - INTERVAL '1 day' THEN
-    DELETE FROM public.ai_rate_limits
-    WHERE user_id = p_user_id AND window_type = 'day';
-    day_count := 0;
-    day_start := NULL;
-  END IF;
+  WHERE user_id = p_user_id
+    AND feature_type = p_feature_type
+    AND window_start >= NOW() - INTERVAL '1 day';
 
   -- 결과 반환
   RETURN QUERY SELECT
-    (COALESCE(minute_count, 0) < minute_limit AND COALESCE(day_count, 0) < day_limit) AS allowed,
-    (minute_limit - COALESCE(minute_count, 0)) AS minute_remaining,
-    (day_limit - COALESCE(day_count, 0)) AS day_remaining,
-    COALESCE(minute_start + INTERVAL '1 minute', NOW() + INTERVAL '1 minute') AS reset_minute,
-    COALESCE(day_start + INTERVAL '1 day', NOW() + INTERVAL '1 day') AS reset_day;
+    (minute_count < minute_limit AND day_count < day_limit) AS allowed,
+    (minute_limit - minute_count) AS minute_remaining,
+    (day_limit - day_count) AS day_remaining,
+    NOW() + INTERVAL '1 minute' AS reset_minute,
+    NOW() + INTERVAL '1 day' AS reset_day;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -338,40 +333,21 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 11. AI Rate Limit 증가 함수
 -- =============================================
 
-CREATE OR REPLACE FUNCTION increment_ai_rate_limit(p_user_id UUID)
+CREATE OR REPLACE FUNCTION increment_ai_rate_limit(
+  p_user_id UUID,
+  p_feature_type VARCHAR(30)
+)
 RETURNS VOID AS $$
 BEGIN
-  -- 분당 카운터 증가 또는 생성
-  INSERT INTO public.ai_rate_limits (user_id, request_count, window_start, window_type)
-  VALUES (p_user_id, 1, NOW(), 'minute')
-  ON CONFLICT (user_id, window_type)
-  DO UPDATE SET
-    request_count = CASE
-      WHEN ai_rate_limits.window_start < NOW() - INTERVAL '1 minute'
-      THEN 1
-      ELSE ai_rate_limits.request_count + 1
-    END,
-    window_start = CASE
-      WHEN ai_rate_limits.window_start < NOW() - INTERVAL '1 minute'
-      THEN NOW()
-      ELSE ai_rate_limits.window_start
-    END;
+  -- 현재 윈도우(1분 단위)에 대한 카운터 증가 또는 생성
+  INSERT INTO public.ai_rate_limits (user_id, feature_type, request_count, window_start)
+  VALUES (p_user_id, p_feature_type, 1, DATE_TRUNC('minute', NOW()))
+  ON CONFLICT (user_id, feature_type, window_start)
+  DO UPDATE SET request_count = ai_rate_limits.request_count + 1;
 
-  -- 일당 카운터 증가 또는 생성
-  INSERT INTO public.ai_rate_limits (user_id, request_count, window_start, window_type)
-  VALUES (p_user_id, 1, NOW(), 'day')
-  ON CONFLICT (user_id, window_type)
-  DO UPDATE SET
-    request_count = CASE
-      WHEN ai_rate_limits.window_start < NOW() - INTERVAL '1 day'
-      THEN 1
-      ELSE ai_rate_limits.request_count + 1
-    END,
-    window_start = CASE
-      WHEN ai_rate_limits.window_start < NOW() - INTERVAL '1 day'
-      THEN NOW()
-      ELSE ai_rate_limits.window_start
-    END;
+  -- 오래된 레코드 정리 (24시간 이전)
+  DELETE FROM public.ai_rate_limits
+  WHERE window_start < NOW() - INTERVAL '24 hours';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -395,11 +371,11 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION invalidate_ai_cache()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- description이 변경되면 해당 이슈의 AI 캐시 삭제
+  -- description이 변경되면 해당 이슈 관련 AI 캐시 삭제
   IF OLD.description IS DISTINCT FROM NEW.description THEN
     DELETE FROM public.ai_cache
-    WHERE issue_id = NEW.id
-      AND cache_type IN ('summary', 'suggestion', 'auto_label', 'duplicate');
+    WHERE feature_type IN ('SUGGEST_SUBTASKS', 'SUMMARIZE_COMMENTS')
+      AND input_hash = generate_content_hash(OLD.description);
   END IF;
 
   RETURN NEW;
@@ -420,8 +396,7 @@ CREATE OR REPLACE FUNCTION invalidate_comment_summary_cache()
 RETURNS TRIGGER AS $$
 BEGIN
   DELETE FROM public.ai_cache
-  WHERE issue_id = NEW.issue_id
-    AND cache_type = 'comment_summary';
+  WHERE feature_type = 'SUMMARIZE_COMMENTS';
 
   RETURN NEW;
 END;
@@ -465,18 +440,17 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION create_notification(
   p_user_id UUID,
-  p_type VARCHAR(50),
-  p_title VARCHAR(200),
-  p_message TEXT,
-  p_reference_type VARCHAR(50) DEFAULT NULL,
-  p_reference_id UUID DEFAULT NULL
+  p_type VARCHAR(30),
+  p_title VARCHAR(100),
+  p_message VARCHAR(500),
+  p_link VARCHAR(500) DEFAULT NULL
 )
 RETURNS UUID AS $$
 DECLARE
   notification_id UUID;
 BEGIN
-  INSERT INTO public.notifications (user_id, type, title, message, reference_type, reference_id)
-  VALUES (p_user_id, p_type, p_title, p_message, p_reference_type, p_reference_id)
+  INSERT INTO public.notifications (user_id, type, title, message, link)
+  VALUES (p_user_id, p_type, p_title, p_message, p_link)
   RETURNING id INTO notification_id;
 
   RETURN notification_id;
@@ -500,8 +474,7 @@ BEGIN
       'issue_assigned',
       '새로운 이슈가 할당되었습니다',
       '이슈 "' || NEW.title || '"가 당신에게 할당되었습니다.',
-      'issue',
-      NEW.id
+      '/issues/' || NEW.issue_key
     );
   END IF;
 
@@ -522,38 +495,38 @@ CREATE TRIGGER trigger_notify_on_assignee_change
 CREATE OR REPLACE FUNCTION notify_on_comment()
 RETURNS TRIGGER AS $$
 DECLARE
-  issue_owner_id UUID;
+  issue_reporter_id UUID;
   issue_assignee_id UUID;
-  issue_title VARCHAR(200);
+  issue_title VARCHAR(100);
+  issue_key VARCHAR(20);
 BEGIN
   -- 이슈 정보 조회
-  SELECT owner_id, assignee_id, title INTO issue_owner_id, issue_assignee_id, issue_title
+  SELECT reporter_id, assignee_id, title, issues.issue_key
+  INTO issue_reporter_id, issue_assignee_id, issue_title, issue_key
   FROM public.issues
   WHERE id = NEW.issue_id;
 
-  -- 이슈 소유자에게 알림 (작성자가 아닌 경우)
-  IF issue_owner_id IS NOT NULL AND issue_owner_id != NEW.user_id THEN
+  -- 이슈 작성자에게 알림 (댓글 작성자가 아닌 경우)
+  IF issue_reporter_id IS NOT NULL AND issue_reporter_id != NEW.user_id THEN
     PERFORM create_notification(
-      issue_owner_id,
+      issue_reporter_id,
       'comment_added',
       '새로운 댓글이 작성되었습니다',
       '이슈 "' || issue_title || '"에 새로운 댓글이 달렸습니다.',
-      'issue',
-      NEW.issue_id
+      '/issues/' || issue_key
     );
   END IF;
 
-  -- 담당자에게 알림 (작성자가 아니고, 소유자와 다른 경우)
+  -- 담당자에게 알림 (작성자가 아니고, 리포터와 다른 경우)
   IF issue_assignee_id IS NOT NULL
      AND issue_assignee_id != NEW.user_id
-     AND issue_assignee_id != issue_owner_id THEN
+     AND issue_assignee_id != issue_reporter_id THEN
     PERFORM create_notification(
       issue_assignee_id,
       'comment_added',
       '새로운 댓글이 작성되었습니다',
       '담당 이슈 "' || issue_title || '"에 새로운 댓글이 달렸습니다.',
-      'issue',
-      NEW.issue_id
+      '/issues/' || issue_key
     );
   END IF;
 
@@ -658,6 +631,32 @@ CREATE TRIGGER trigger_set_default_issue_status
 
 
 -- =============================================
+-- 22. 팀 생성 시 자동으로 팀 멤버에 추가
+-- =============================================
+
+CREATE OR REPLACE FUNCTION add_owner_to_team()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- 팀 생성자를 자동으로 OWNER로 추가
+  INSERT INTO public.team_members (team_id, user_id, role)
+  VALUES (NEW.id, NEW.owner_id, 'OWNER');
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_add_owner_to_team
+  AFTER INSERT ON public.teams
+  FOR EACH ROW
+  EXECUTE FUNCTION add_owner_to_team();
+
+
+-- =============================================
 -- 완료 메시지
 -- =============================================
--- 이 스크립트 실행 후, 003_seed_data.sql을 실행하여 테스트 데이터를 추가하세요.
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ STEP 5 완료: 함수 및 트리거 생성 성공';
+  RAISE NOTICE '다음 파일 실행 (선택사항): step6_seed_data.sql';
+END $$;

@@ -70,7 +70,7 @@ export default function EditorTestPage() {
         .from('posts')
         .insert({
           title: title.trim(),
-          content_html: content,
+          content: content, // HTML 형태로 저장
         })
         .select();
 
@@ -131,7 +131,7 @@ export default function EditorTestPage() {
    */
   const handleLoadPost = (post: Post) => {
     setTitle(post.title);
-    setContent(post.content_html);
+    setContent(post.content);
     setSelectedPost(null); // 미리보기 닫기
   };
 
@@ -283,7 +283,7 @@ export default function EditorTestPage() {
                 <div
                   className="prose max-w-none ql-editor"
                   dangerouslySetInnerHTML={{
-                    __html: selectedPost.content_html,
+                    __html: selectedPost.content,
                   }}
                 />
               </div>

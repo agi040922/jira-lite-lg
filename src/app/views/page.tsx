@@ -6,8 +6,7 @@ import { useUserId } from '@/hooks/useAuth';
 const AppLayout = dynamic(() => import('@/components/AppLayout'), { ssr: false });
 const Dashboard = dynamic(() => import('@/components/Dashboard'), { ssr: false });
 
-export default function DashboardPage() {
-  // 인증 체크 및 userId 가져오기 (test/auth 패턴 기반)
+export default function ViewsPage() {
   const { userId, loading } = useUserId(true);
 
   if (loading) {
@@ -18,13 +17,11 @@ export default function DashboardPage() {
     );
   }
 
-  if (!userId) {
-    return null;
-  }
+  if (!userId) return null;
 
   return (
-    <AppLayout currentView="my_issues" title="My issues">
-      <Dashboard userId={userId} />
+    <AppLayout currentView="views" title="Views">
+      <Dashboard userId={userId} title="All Views" />
     </AppLayout>
   );
 }

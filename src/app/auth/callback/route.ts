@@ -19,6 +19,6 @@ export async function GET(request: Request) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // 로그인 성공 후 테스트 페이지로 리다이렉트
-  return NextResponse.redirect(`${origin}/test/auth`)
+  // 로그인 성공 후 대시보드로 리다이렉트
+  return NextResponse.redirect(`${origin}/dashboard`)
 }

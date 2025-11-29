@@ -1,27 +1,53 @@
 'use client';
 
-import React from 'react';
-import { issues } from '../mockData';
+import React, { useEffect, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import { Status, Issue, Priority } from '../types';
 import { CheckCircle2, Circle, AlertCircle, Clock, Plus, Filter, SlidersHorizontal, LayoutPanelLeft } from 'lucide-react';
+import type { IssueWithRelations, User, Label, ProjectStatus, Priority as DBPriority } from '@/types/database.types';
 
 interface IssueGroupProps {
-  status: Status;
-  issues: Issue[];
+  statusName: string;
+  issues: IssueWithRelations[];
   icon: React.ReactNode;
   label: string;
+  onOpenIssue?: (issue: IssueWithRelations) => void;
 }
 
-const getPriorityIcon = (priority: Priority) => {
+// Status enum을 DB 데이터와 매칭하기 위한 맵
+const STATUS_MAP = {
+  TODO: 'TODO',
+  IN_PROGRESS: 'IN_PROGRESS',
+  IN_REVIEW: 'IN_REVIEW',
+  DONE: 'DONE',
+  BACKLOG: 'BACKLOG',
+} as const;
+
+const getPriorityIcon = (priority: DBPriority) => {
     switch(priority) {
-        case Priority.HIGH: return <div className="text-red-500"><AlertCircle size={14} /></div>;
-        case Priority.MEDIUM: return <div className="text-orange-400"><div className="w-3 h-0.5 bg-orange-400 rounded-full"></div><div className="w-3 h-0.5 bg-orange-400 rounded-full mt-0.5"></div></div>;
-        case Priority.LOW: return <div className="text-slate-400"><div className="w-3 h-0.5 bg-slate-400 rounded-full"></div></div>;
+        case 'HIGH': return <div className="text-red-500"><AlertCircle size={14} /></div>;
+        case 'MEDIUM': return <div className="text-orange-400"><div className="w-3 h-0.5 bg-orange-400 rounded-full"></div><div className="w-3 h-0.5 bg-orange-400 rounded-full mt-0.5"></div></div>;
+        case 'LOW': return <div className="text-slate-400"><div className="w-3 h-0.5 bg-slate-400 rounded-full"></div></div>;
         default: return null;
     }
 };
 
-const IssueGroup: React.FC<IssueGroupProps> = ({ status, issues, icon, label }) => {
+// 날짜 포맷팅 함수
+const formatDate = (dateString: string | null): string => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - date.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const IssueGroup: React.FC<IssueGroupProps> = ({ statusName, issues, icon, label, onOpenIssue }) => {
     if (issues.length === 0) return null;
 
     return (
@@ -36,15 +62,19 @@ const IssueGroup: React.FC<IssueGroupProps> = ({ status, issues, icon, label }) 
             </div>
             <div className="border-t border-slate-100">
                 {issues.map((issue) => (
-                    <div key={issue.id} className="group flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 border-b border-slate-50 transition-colors cursor-default">
+                    <div
+                        key={issue.id}
+                        onClick={() => onOpenIssue?.(issue)}
+                        className="group flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 border-b border-slate-50 transition-colors cursor-pointer"
+                    >
                         {/* Status Icon */}
                         <div className="flex-shrink-0 text-slate-400 pt-0.5">
-                           {issue.status === Status.DONE ? <CheckCircle2 size={16} className="text-brand-500" /> : <Circle size={16} />}
+                           {issue.status?.name === 'DONE' ? <CheckCircle2 size={16} className="text-brand-500" /> : <Circle size={16} />}
                         </div>
-                        
+
                         {/* ID */}
                         <div className="flex-shrink-0 w-20 text-xs text-slate-500 font-mono">
-                            {issue.id}
+                            {issue.issue_key}
                         </div>
 
                         {/* Title */}
@@ -54,9 +84,16 @@ const IssueGroup: React.FC<IssueGroupProps> = ({ status, issues, icon, label }) 
 
                         {/* Labels (Desktop) */}
                         <div className="hidden md:flex gap-1.5">
-                             {issue.labels.map(label => (
-                                 <span key={label} className="px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-500">
-                                     {label}
+                             {issue.labels?.map(label => (
+                                 <span
+                                   key={label.id}
+                                   className="px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-[10px] text-slate-500"
+                                   style={{
+                                     backgroundColor: label.color ? `${label.color}15` : undefined,
+                                     borderColor: label.color || undefined
+                                   }}
+                                 >
+                                     {label.name}
                                  </span>
                              ))}
                         </div>
@@ -68,12 +105,22 @@ const IssueGroup: React.FC<IssueGroupProps> = ({ status, issues, icon, label }) 
 
                         {/* Assignee */}
                         <div className="flex-shrink-0">
-                            <img src={issue.assignee?.avatar} alt="" className="w-5 h-5 rounded-full" />
+                            {issue.assignee?.profile_image ? (
+                              <img
+                                src={issue.assignee.profile_image}
+                                alt={issue.assignee.name}
+                                className="w-5 h-5 rounded-full"
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-600">
+                                {issue.assignee?.name?.charAt(0).toUpperCase() || '?'}
+                              </div>
+                            )}
                         </div>
 
                         {/* Date */}
                         <div className="flex-shrink-0 w-20 text-right text-xs text-slate-400">
-                            {issue.createdAt}
+                            {formatDate(issue.created_at)}
                         </div>
                     </div>
                 ))}
@@ -82,12 +129,131 @@ const IssueGroup: React.FC<IssueGroupProps> = ({ status, issues, icon, label }) 
     );
 };
 
-const Dashboard: React.FC = () => {
-  // Sort issues into groups based on screenshot structure
-  const inReviewIssues = issues.filter(i => i.status === Status.IN_REVIEW);
-  const todoIssues = issues.filter(i => i.status === Status.TODO);
-  const backlogIssues = issues.filter(i => i.status === Status.BACKLOG);
-  const doneIssues = issues.filter(i => i.status === Status.DONE);
+interface DashboardProps {
+  userId: string;
+  title?: string;
+  onOpenIssue?: (issue: IssueWithRelations) => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ userId, title = "My issues", onOpenIssue }) => {
+  const [issues, setIssues] = useState<IssueWithRelations[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchIssues = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const supabase = createClient();
+
+        // issues 테이블에서 조회하면서 필요한 데이터 조인
+        const { data, error: fetchError } = await supabase
+          .from('issues')
+          .select(`
+            *,
+            assignee:assignee_id(id, email, name, profile_image),
+            owner:owner_id(id, email, name, profile_image),
+            status:status_id(id, project_id, name, color, position, is_default)
+          `)
+          .or(`assignee_id.eq.${userId},owner_id.eq.${userId}`)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false });
+
+        if (fetchError) {
+          console.error('Error fetching issues:', fetchError);
+          setError(fetchError.message);
+          return;
+        }
+
+        // labels 별도 조회 (다대다 관계)
+        if (data && data.length > 0) {
+          const issueIds = data.map(issue => issue.id);
+
+          const { data: labelsData, error: labelsError } = await supabase
+            .from('issue_labels')
+            .select(`
+              issue_id,
+              labels:label_id(id, name, color)
+            `)
+            .in('issue_id', issueIds);
+
+          if (labelsError) {
+            console.error('Error fetching labels:', labelsError);
+          }
+
+          // labels를 issue에 매핑
+          const issuesWithLabels = data.map(issue => {
+            const issueLabels = labelsData
+              ?.filter(il => il.issue_id === issue.id)
+              .map(il => il.labels)
+              .filter((label): label is Label => label !== null) || [];
+
+            return {
+              ...issue,
+              labels: issueLabels,
+            };
+          });
+
+          setIssues(issuesWithLabels);
+        } else {
+          setIssues([]);
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err);
+        setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (userId) {
+      fetchIssues();
+    }
+  }, [userId]);
+
+  // 상태별로 이슈 그룹화
+  const inReviewIssues = issues.filter(i => i.status?.name === STATUS_MAP.IN_REVIEW);
+  const todoIssues = issues.filter(i => i.status?.name === STATUS_MAP.TODO);
+  const backlogIssues = issues.filter(i => i.status?.name === STATUS_MAP.BACKLOG);
+  const doneIssues = issues.filter(i => i.status?.name === STATUS_MAP.DONE);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full bg-white">
+        <div className="h-12 border-b border-slate-100 flex items-center justify-between px-4 bg-white sticky top-0 z-10">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 bg-purple-100 rounded text-purple-600 flex items-center justify-center">
+              <CheckCircle2 size={14} />
+            </div>
+            <span className="font-semibold text-sm text-slate-800">{title}</span>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-slate-400 text-sm">Loading issues...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col h-full bg-white">
+        <div className="h-12 border-b border-slate-100 flex items-center justify-between px-4 bg-white sticky top-0 z-10">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 bg-purple-100 rounded text-purple-600 flex items-center justify-center">
+              <CheckCircle2 size={14} />
+            </div>
+            <span className="font-semibold text-sm text-slate-800">{title}</span>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-red-500 text-sm">Error: {error}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -97,7 +263,8 @@ const Dashboard: React.FC = () => {
                 <div className="w-5 h-5 bg-purple-100 rounded text-purple-600 flex items-center justify-center">
                     <CheckCircle2 size={14} />
                 </div>
-                <span className="font-semibold text-sm text-slate-800">My issues</span>
+                <span className="font-semibold text-sm text-slate-800">{title}</span>
+                <span className="text-slate-400 text-xs">({issues.length})</span>
             </div>
             <div className="flex items-center gap-2">
                 <button className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded">
@@ -114,30 +281,43 @@ const Dashboard: React.FC = () => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-2 md:p-6">
             <div className="max-w-5xl mx-auto">
-                <IssueGroup 
-                    label="In Review" 
-                    status={Status.IN_REVIEW} 
-                    issues={inReviewIssues}
-                    icon={<Clock size={16} className="text-yellow-500" />}
-                />
-                <IssueGroup 
-                    label="Todo" 
-                    status={Status.TODO} 
-                    issues={todoIssues}
-                    icon={<Circle size={16} className="text-slate-400" />}
-                />
-                <IssueGroup 
-                    label="Backlog" 
-                    status={Status.BACKLOG} 
-                    issues={backlogIssues}
-                    icon={<Circle size={16} style={{strokeDasharray: '2 2'}} className="text-slate-300" />}
-                />
-                 <IssueGroup 
-                    label="Done" 
-                    status={Status.DONE} 
-                    issues={doneIssues}
-                    icon={<CheckCircle2 size={16} className="text-brand-500" />}
-                />
+                {issues.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400">
+                    <Circle size={48} className="mx-auto mb-4 opacity-20" />
+                    <p className="text-sm">No issues assigned to you</p>
+                  </div>
+                ) : (
+                  <>
+                    <IssueGroup
+                        label="In Review"
+                        statusName={STATUS_MAP.IN_REVIEW}
+                        issues={inReviewIssues}
+                        icon={<Clock size={16} className="text-yellow-500" />}
+                        onOpenIssue={onOpenIssue}
+                    />
+                    <IssueGroup
+                        label="Todo"
+                        statusName={STATUS_MAP.TODO}
+                        issues={todoIssues}
+                        icon={<Circle size={16} className="text-slate-400" />}
+                        onOpenIssue={onOpenIssue}
+                    />
+                    <IssueGroup
+                        label="Backlog"
+                        statusName={STATUS_MAP.BACKLOG}
+                        issues={backlogIssues}
+                        icon={<Circle size={16} style={{strokeDasharray: '2 2'}} className="text-slate-300" />}
+                        onOpenIssue={onOpenIssue}
+                    />
+                     <IssueGroup
+                        label="Done"
+                        statusName={STATUS_MAP.DONE}
+                        issues={doneIssues}
+                        icon={<CheckCircle2 size={16} className="text-brand-500" />}
+                        onOpenIssue={onOpenIssue}
+                    />
+                  </>
+                )}
             </div>
         </div>
     </div>

@@ -63,7 +63,7 @@ export default function AuthTestPage() {
         password,
         options: {
           // 이메일 확인 후 리다이렉트될 URL
-          emailRedirectTo: `${window.location.origin}/test/auth`,
+          emailRedirectTo: `${window.location.origin}/dashboard`,
         },
       })
 
@@ -180,7 +180,7 @@ export default function AuthTestPage() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: `${window.location.origin}/test/auth`,
+        redirectTo: `${window.location.origin}/dashboard`,
       })
 
       if (error) throw error

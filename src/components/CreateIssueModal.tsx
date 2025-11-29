@@ -2,49 +2,134 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, AlertTriangle, ArrowRight, Tag } from 'lucide-react';
-import { issues } from '../mockData';
+import { createClient } from '@/lib/supabase/client';
 
 interface CreateIssueModalProps {
     onClose: () => void;
+    onSuccess?: () => void;
 }
 
-const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ onClose }) => {
+const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ onClose, onSuccess }) => {
+    const supabase = createClient();
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
+    const [projectId, setProjectId] = useState('');
+    const [priority, setPriority] = useState('');
     const [duplicates, setDuplicates] = useState<any[]>([]);
     const [aiLabels, setAiLabels] = useState<string[]>([]);
     const [showAiSuggestion, setShowAiSuggestion] = useState(false);
+    const [projects, setProjects] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [createAnother, setCreateAnother] = useState(false);
 
-    // AI Mock Logic: Duplicate Detection
+    // 프로젝트 목록 조회
     useEffect(() => {
-        if (title.length > 3) {
-            // Find issues with similar words (simple mock logic)
-            const words = title.split(' ');
-            const found = issues.filter(i => 
-                words.some(w => w.length > 2 && i.title.includes(w))
-            ).slice(0, 2);
-            setDuplicates(found);
-        } else {
+        const fetchProjects = async () => {
+            const { data, error } = await supabase
+                .from('projects')
+                .select('id, name, key')
+                .is('deleted_at', null)
+                .order('created_at', { ascending: false });
+
+            if (!error && data) {
+                setProjects(data);
+                if (data.length > 0) {
+                    setProjectId(data[0].id); // 첫 번째 프로젝트 자동 선택
+                }
+            }
+        };
+
+        fetchProjects();
+    }, []);
+
+    // AI 중복 검사 (디바운싱)
+    useEffect(() => {
+        if (title.length < 3) {
             setDuplicates([]);
+            return;
         }
+
+        const timer = setTimeout(async () => {
+            const { data, error } = await supabase
+                .from('issues')
+                .select('id, issue_key, title')
+                .is('deleted_at', null)
+                .ilike('title', `%${title}%`)
+                .limit(3);
+
+            if (!error && data) {
+                setDuplicates(data);
+            }
+        }, 500); // 500ms 디바운싱
+
+        return () => clearTimeout(timer);
     }, [title]);
 
-    // AI Mock Logic: Label Suggestion
+    // AI 라벨 제안 (기존 로직 유지)
     useEffect(() => {
         if (description.length > 10) {
             setShowAiSuggestion(true);
-            // Simple keyword matching for mock
             const suggestions = [];
             if (description.includes('UI') || description.includes('화면')) suggestions.push('Design');
             if (description.includes('API') || description.includes('서버')) suggestions.push('Backend');
             if (description.includes('오류') || description.includes('버그')) suggestions.push('Bug');
-            
+
             if (suggestions.length === 0) suggestions.push('General');
             setAiLabels(suggestions);
         } else {
             setShowAiSuggestion(false);
         }
     }, [description]);
+
+    // 이슈 생성 함수
+    const handleCreateIssue = async () => {
+        if (!title.trim() || !projectId) {
+            alert('제목과 프로젝트를 입력해주세요.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            // 이슈 생성 (issue_key는 트리거에서 자동 생성)
+            const { error } = await supabase
+                .from('issues')
+                .insert({
+                    title: title.trim(),
+                    description: description.trim() || null,
+                    project_id: projectId,
+                    priority: priority || null,
+                    type: 'task', // 기본값
+                    status: 'backlog', // 기본값
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            // 성공 처리
+            if (onSuccess) {
+                onSuccess();
+            }
+
+            if (createAnother) {
+                // "Create another" 체크 시 폼만 초기화
+                setTitle('');
+                setDescription('');
+                setPriority('');
+                setDuplicates([]);
+                setAiLabels([]);
+                setShowAiSuggestion(false);
+            } else {
+                // 모달 닫기
+                onClose();
+            }
+        } catch (error: any) {
+            console.error('이슈 생성 실패:', error);
+            alert('이슈 생성에 실패했습니다: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -85,10 +170,10 @@ const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ onClose }) => {
                                 {duplicates.map(d => (
                                     <div key={d.id} className="flex items-center justify-between bg-white/50 p-2 rounded border border-yellow-100 text-sm">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-slate-400 font-mono text-xs">{d.id}</span>
+                                            <span className="text-slate-400 font-mono text-xs">{d.issue_key}</span>
                                             <span className="text-slate-700">{d.title}</span>
                                         </div>
-                                        <a href="#" className="text-brand-600 hover:underline text-xs flex items-center gap-1">
+                                        <a href={`/issues/${d.id}`} className="text-brand-600 hover:underline text-xs flex items-center gap-1">
                                             View <ArrowRight size={10} />
                                         </a>
                                     </div>
@@ -138,18 +223,33 @@ const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ onClose }) => {
                     <div className="grid grid-cols-2 gap-4 pt-2">
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Project</label>
-                            <select className="w-full bg-slate-50 border border-slate-200 rounded-md py-1.5 px-2 text-sm text-slate-700 focus:outline-none focus:border-slate-300">
-                                <option>Lightsoft Core</option>
-                                <option>Mobile App</option>
+                            <select
+                                className="w-full bg-slate-50 border border-slate-200 rounded-md py-1.5 px-2 text-sm text-slate-700 focus:outline-none focus:border-slate-300"
+                                value={projectId}
+                                onChange={(e) => setProjectId(e.target.value)}
+                            >
+                                {projects.length === 0 ? (
+                                    <option value="">프로젝트 없음</option>
+                                ) : (
+                                    projects.map(project => (
+                                        <option key={project.id} value={project.id}>
+                                            {project.name}
+                                        </option>
+                                    ))
+                                )}
                             </select>
                         </div>
                          <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Priority</label>
-                            <select className="w-full bg-slate-50 border border-slate-200 rounded-md py-1.5 px-2 text-sm text-slate-700 focus:outline-none focus:border-slate-300">
-                                <option>None</option>
-                                <option>Low</option>
-                                <option>Medium</option>
-                                <option>High</option>
+                            <select
+                                className="w-full bg-slate-50 border border-slate-200 rounded-md py-1.5 px-2 text-sm text-slate-700 focus:outline-none focus:border-slate-300"
+                                value={priority}
+                                onChange={(e) => setPriority(e.target.value)}
+                            >
+                                <option value="">None</option>
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
                             </select>
                         </div>
                     </div>
@@ -159,16 +259,29 @@ const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ onClose }) => {
                 <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-t border-slate-200 rounded-b-xl">
                     <div className="flex items-center gap-3">
                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500" />
+                            <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500"
+                                checked={createAnother}
+                                onChange={(e) => setCreateAnother(e.target.checked)}
+                            />
                             <span className="text-sm text-slate-600">Create another</span>
                          </label>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+                        <button
+                            onClick={onClose}
+                            className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                            disabled={loading}
+                        >
                             Cancel
                         </button>
-                        <button className="px-4 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition-all hover:scale-[1.02]">
-                            Create Issue
+                        <button
+                            onClick={handleCreateIssue}
+                            className="px-4 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={loading}
+                        >
+                            {loading ? 'Creating...' : 'Create Issue'}
                         </button>
                     </div>
                 </div>

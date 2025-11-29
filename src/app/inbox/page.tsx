@@ -4,9 +4,9 @@ import dynamic from 'next/dynamic';
 import { useUserId } from '@/hooks/useAuth';
 
 const AppLayout = dynamic(() => import('@/components/AppLayout'), { ssr: false });
-const Dashboard = dynamic(() => import('@/components/Dashboard'), { ssr: false });
+const Inbox = dynamic(() => import('@/components/Inbox'), { ssr: false });
 
-export default function DashboardPage() {
+export default function InboxPage() {
   // 인증 체크 및 userId 가져오기 (test/auth 패턴 기반)
   const { userId, loading } = useUserId(true);
 
@@ -23,8 +23,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <AppLayout currentView="my_issues" title="My issues">
-      <Dashboard userId={userId} />
+    <AppLayout currentView="inbox" title="Inbox">
+      <Inbox userId={userId} />
     </AppLayout>
   );
 }

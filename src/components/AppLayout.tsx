@@ -24,17 +24,29 @@ export default function AppLayout({ children, currentView, title }: AppLayoutPro
       case 'my_issues':
         router.push('/dashboard');
         break;
+      case 'inbox':
+        router.push('/inbox');
+        break;
       case 'projects':
         router.push('/projects');
         break;
       case 'team_issues':
-        router.push('/team/issues');
+        router.push('/issues');
         break;
       case 'team_manage':
         router.push('/team/manage');
         break;
       case 'stats':
         router.push('/insights');
+        break;
+      case 'settings':
+        router.push('/settings');
+        break;
+      case 'reviews':
+        router.push('/reviews');
+        break;
+      case 'views':
+        router.push('/views');
         break;
       default:
         break;
@@ -43,7 +55,7 @@ export default function AppLayout({ children, currentView, title }: AppLayoutPro
 
   // 이슈 모달 열기 함수를 children에 전달하기 위한 context
   const handleOpenIssue = (issue: Issue) => {
-    setSelectedIssue(issue);
+    router.push(`/issues/${issue.id}`);
   };
 
   return (
@@ -56,7 +68,7 @@ export default function AppLayout({ children, currentView, title }: AppLayoutPro
       />
 
       {/* Main Content Wrapper */}
-      <div className="flex-1 ml-[260px] flex flex-col h-screen">
+      <div className="flex-1 ml-0 md:ml-[260px] flex flex-col h-screen">
         {/* Mobile Header */}
         <Header title={title} />
         
@@ -69,10 +81,6 @@ export default function AppLayout({ children, currentView, title }: AppLayoutPro
       </div>
 
       {/* Global Modals */}
-      {selectedIssue && (
-        <IssueModal issue={selectedIssue} onClose={() => setSelectedIssue(null)} />
-      )}
-      
       {showCreateModal && (
         <CreateIssueModal onClose={() => setShowCreateModal(false)} />
       )}
